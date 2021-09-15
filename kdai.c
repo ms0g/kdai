@@ -231,7 +231,7 @@ static int dhcp_is_valid(struct sk_buff *skb) {
     unsigned char shaddr[ETH_ALEN];
 
     eth = eth_hdr(skb);
-	memcpy(shaddr, eth->h_source, ETH_ALEN);
+    memcpy(shaddr, eth->h_source, ETH_ALEN);
 
     udp = udp_hdr(skb);
     payload = (struct dhcp *) ((unsigned char *)udp + sizeof(struct udphdr));
@@ -267,7 +267,7 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
     unsigned char shaddr[ETH_ALEN],dhaddr[ETH_ALEN];
 
     eth = eth_hdr(skb);
-	memcpy(shaddr, eth->h_source, ETH_ALEN);
+    memcpy(shaddr, eth->h_source, ETH_ALEN);
     memcpy(dhaddr, eth->h_dest, ETH_ALEN);
 
     switch (ar_op) {
@@ -355,12 +355,15 @@ static void delete_dhcp_snooping_entry(u_int32_t ip) {
 static void clean_dhcp_snooping_table(void) {
     struct list_head* curr, *next;
     struct dhcp_snooping_entry *entry;
-
+    unsigned long flags;
+    
+    spin_lock_irqsave(&slock, flags);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
         entry = list_entry(curr, struct dhcp_snooping_entry, list);
         list_del(&entry->list);
         kfree(entry);
     }
+    spin_unlock_irqrestore(&slock, flags);
 }
 
 
