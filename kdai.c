@@ -94,7 +94,7 @@ struct dhcp_snooping_entry {
 
 static LIST_HEAD(dhcp_snooping_list);
 
-static void insert_dhcp_snooping_entry(u_int8_t *mac, u_int32_t ip, u_int32_t lease_time, u_int32_t current_time);
+static void insert_dhcp_snooping_entry(u_int8_t *mac, u_int32_t ip, u_int32_t lease_time, u_int32_t expire_time);
 static struct dhcp_snooping_entry *find_dhcp_snooping_entry(u_int32_t ip);
 static void delete_dhcp_snooping_entry(u_int32_t ip);
 static void clean_dhcp_snooping_table(void);
@@ -121,7 +121,7 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     struct dhcp_snooping_entry *entry;
     struct net_device *dev = skb->dev;
     struct in_device *indev = in_dev_get(dev);
-	struct in_ifaddr *ifa = indev->ifa_list;
+    struct in_ifaddr *ifa = indev->ifa_list;
     char ifname[IFNAMSIZ];
     unsigned int status = NF_ACCEPT;
       
@@ -202,7 +202,8 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
                         entry->lease_time = ntohl(lease_time);
                         entry->expires = ts.tv_sec + ntohl(lease_time);
                     } else {
-                        insert_dhcp_snooping_entry(payload->chaddr, payload->yiaddr, ntohl(lease_time), ts.tv_sec);
+                        insert_dhcp_snooping_entry(payload->chaddr, payload->yiaddr, ntohl(lease_time), 
+                                                    ts.tv_sec + ntohl(lease_time));
                     }
                     break;
                 }
@@ -280,7 +281,7 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
             break;
         }
         case ARPOP_REPLY:{
-            if ((memcmp(tha, dhaddr, ETH_ALEN) != 0) || (memcmp(sha, shaddr, 6) != 0) || 
+            if ((memcmp(tha, dhaddr, ETH_ALEN) != 0) || (memcmp(sha, shaddr, ETH_ALEN) != 0) || 
                 ipv4_is_multicast(tip) || ipv4_is_loopback(tip) || ipv4_is_zeronet(tip) || 
                 ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip)) {
                     printk(KERN_INFO "kdai:  Not valid ARP reply from %pM\n", sha);
@@ -302,14 +303,14 @@ static int eth_is_bcast(unsigned char *mac) {
 }
 
 
-static void insert_dhcp_snooping_entry(u_int8_t *mac, u_int32_t ip, u_int32_t lease_time, u_int32_t current_time) {
+static void insert_dhcp_snooping_entry(u_int8_t *mac, u_int32_t ip, u_int32_t lease_time, u_int32_t expire_time) {
     struct dhcp_snooping_entry *entry;
     unsigned long flags;
 
     entry = kmalloc(sizeof(struct dhcp_snooping_entry), GFP_KERNEL);
     entry->ip = ip;
     entry->lease_time = lease_time;
-    entry->expires = current_time + lease_time;
+    entry->expires = expire_time;
     memcpy(entry->mac, mac, ETH_ALEN);
     
     spin_lock_irqsave(&slock, flags);
@@ -356,7 +357,7 @@ static void clean_dhcp_snooping_table(void) {
     struct list_head* curr, *next;
     struct dhcp_snooping_entry *entry;
     unsigned long flags;
-    
+
     spin_lock_irqsave(&slock, flags);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
         entry = list_entry(curr, struct dhcp_snooping_entry, list);
