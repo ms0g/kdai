@@ -1,5 +1,10 @@
 # kdai
-A LKM(Loadable Kernel Module) for detection and prevention of ARP Poisoning Attack. The module builds a DHCP snooping table that includes mapping IP address and MAC pair on runtime, then performs a cross-checking of ARP cache and the table. If any mismatch, drops the packet.
+A LKM(Loadable Kernel Module) for detection and prevention of [ARP Poisoning Attack](https://en.wikipedia.org/wiki/ARP_spoofing). 
+
+kdai intercepts all ARP requests and responses.Each of these intercepted packets is verified for valid MAC address to IP address bindings before the local ARP cache is updated. Invalid ARP packets are dropped.
+
+Determining the validity of ARP packet is based on a cross-checking of ARP cache and a valid MAC address to IP address bindings stored in the DHCP snooping table which is built at runtime.
+
 ### Prerequisites
 + [GCC](http://gcc.gnu.org "GCC home") (>= 5.4.0)
 ### Building
