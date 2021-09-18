@@ -1,6 +1,6 @@
 /**
  * @file kdai.c
- * @author M. Sami GURPINAR (sami.gurpinar@gmail.com)
+ * @author M. Sami GURPINAR <sami.gurpinar@gmail.com>
  * @brief A LKM(Loadable Kernel Module) for detection and prevention of ARP Poisoning Attack.
  * @version 0.1
  *
@@ -94,6 +94,11 @@ struct dhcp_snooping_entry {
 
 static LIST_HEAD(dhcp_snooping_list);
 
+static spinlock_t slock;
+static struct task_struct *dhc_thread;
+static struct nf_hook_ops *arpho = NULL;
+static struct nf_hook_ops *ipho = NULL;
+
 static void insert_dhcp_snooping_entry(u_int8_t *mac, u_int32_t ip, u_int32_t lease_time, u_int32_t expire_time);
 static struct dhcp_snooping_entry *find_dhcp_snooping_entry(u_int32_t ip);
 static void delete_dhcp_snooping_entry(u_int32_t ip);
@@ -105,11 +110,6 @@ static int dhcp_is_valid(struct sk_buff *skb);
 static int eth_is_bcast(unsigned char *mac);
 
 static int dhc_th_func(void *arg);
-
-static spinlock_t slock;
-static struct task_struct *dhc_thread;
-static struct nf_hook_ops *arpho = NULL;
-static struct nf_hook_ops *ipho = NULL;
 
 
 static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state) {
@@ -243,7 +243,7 @@ static int dhcp_is_valid(struct sk_buff *skb) {
         case DHCP_DISCOVER:
         case DHCP_REQUEST:{
             if (memcmp(payload->chaddr, shaddr, ETH_ALEN) != 0) {
-                printk(KERN_INFO "kdai:  Not valid DHCP packet\n");
+                printk(KERN_INFO "kdai:  Invalid DHCP packet\n");
                 status = 0;
             }
             break;
@@ -253,7 +253,7 @@ static int dhcp_is_valid(struct sk_buff *skb) {
     }
     
     if (payload->giaddr != 0) {
-        printk(KERN_INFO "kdai:  Not valid DHCP packet\n");
+        printk(KERN_INFO "kdai:  Invalid DHCP packet\n");
         status = 0;
     }
     
@@ -275,7 +275,7 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
         case ARPOP_REQUEST:{
             if ((memcmp(sha, shaddr, ETH_ALEN) != 0) || !eth_is_bcast(dhaddr) || 
                 ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip)) {
-                    printk(KERN_INFO "kdai:  Not valid ARP request from %pM\n", sha);
+                    printk(KERN_INFO "kdai:  Invalid ARP request from %pM\n", sha);
                     status = 0;
             }
             break;
@@ -284,7 +284,7 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
             if ((memcmp(tha, dhaddr, ETH_ALEN) != 0) || (memcmp(sha, shaddr, ETH_ALEN) != 0) || 
                 ipv4_is_multicast(tip) || ipv4_is_loopback(tip) || ipv4_is_zeronet(tip) || 
                 ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip)) {
-                    printk(KERN_INFO "kdai:  Not valid ARP reply from %pM\n", sha);
+                    printk(KERN_INFO "kdai:  Invalid ARP reply from %pM\n", sha);
                     status = 0;
             }
             break;
@@ -393,16 +393,16 @@ static int dhc_th_func(void *arg) {
 
     
 static int __init kdai_init(void) {
-    arpho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     /* Initialize arp netfilter hook */
+    arpho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     arpho->hook = (nf_hookfn *) arp_hook;       /* hook function */
     arpho->hooknum = NF_ARP_IN;                 /* received packets */
     arpho->pf = NFPROTO_ARP;                    /* ARP */
     arpho->priority = NF_IP_PRI_FIRST;
     nf_register_hook(arpho);
     
-    ipho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     /* Initialize ip netfilter hook */
+    ipho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     ipho->hook = (nf_hookfn *) ip_hook;         /* hook function */
     ipho->hooknum = NF_INET_PRE_ROUTING;        /* received packets */
     ipho->pf = NFPROTO_IPV4;                    /* IP */
