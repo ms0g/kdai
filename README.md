@@ -20,7 +20,7 @@ sudo insmod kdai.ko
 $ dmesg | tail -5
 [80073.746601] kdai:  DHCP Thread Created Successfully...
 [80145.589597] kdai:  DHCPACK of 192.168.1.51
-[80160.701525] kdai:  Not valid ARP request from 08:00:27:21:04:c5
+[80160.701525] kdai:  Invalid ARP request from 08:00:27:21:04:c5
 [80178.871986] kdai:  ARP spoofing detected on enp0s8 from 08:00:27:21:04:c5
 [80550.748553] kdai:  DHCPACK of 192.168.1.42
 ```
