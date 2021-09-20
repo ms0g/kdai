@@ -49,6 +49,8 @@
 #define DHCP_OPTION_LEASE_TIME      0x33
 #define DHCP_OPTION_END             0xff
 
+#define eth_is_bcast(addr) (((addr)[0] & 0xffff) && ((addr)[2] & 0xffff) && ((addr)[4] & 0xffff))
+
 enum dhcp_message_type {
     DHCP_DISCOVER = 1,
     DHCP_OFFER,
@@ -107,8 +109,6 @@ static void clean_dhcp_snooping_table(void);
 static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op, 
                         unsigned char *sha, u_int32_t sip, unsigned char *tha, u_int32_t tip);
 static int dhcp_is_valid(struct sk_buff *skb);
-static int eth_is_bcast(unsigned char *mac);
-
 static int dhc_th_func(void *arg);
 
 
@@ -126,7 +126,7 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     unsigned int status = NF_ACCEPT;
       
     if (unlikely(!skb))
-        return;
+        return NF_DROP;
 
     arp = arp_hdr(skb);
     arp_ptr = (unsigned char *)(arp + 1);
@@ -176,7 +176,7 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
     unsigned int status = NF_ACCEPT;
 
     if (unlikely(!skb))
-        return;
+        return NF_DROP;
 
     udp = udp_hdr(skb);
     
@@ -295,11 +295,6 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
 
     return status;
 
-}
-
-
-static int eth_is_bcast(unsigned char *mac) {
-    return memcmp(mac, "\xff\xff\xff\xff\xff\xff", ETH_ALEN) == 0;
 }
 
 
