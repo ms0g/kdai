@@ -122,7 +122,6 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     struct net_device *dev = skb->dev;
     struct in_device *indev = in_dev_get(dev);
     struct in_ifaddr *ifa = indev->ifa_list;
-    char ifname[IFNAMSIZ];
     unsigned int status = NF_ACCEPT;
       
     if (unlikely(!skb))
@@ -138,27 +137,24 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     arp_ptr += dev->addr_len;
     memcpy(&tip, arp_ptr, 4);
 
-    memset(ifname, 0, IFNAMSIZ);
-
     if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip)) {
         for (;ifa; ifa = ifa->ifa_next) {
             if (ifa->ifa_address == tip) {
-                strncpy(ifname, ifa->ifa_label, IFNAMSIZ);
+                hw = neigh_lookup(&arp_tbl, &sip, dev);   
+                if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
+                    status = NF_DROP;
+                }
+                
+                entry = find_dhcp_snooping_entry(sip);
+                if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
+                    printk(KERN_INFO "kdai:  ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
+                    status = NF_DROP;
+                } else status = NF_ACCEPT;             
+        
                 break;
-            }
+            } else status = NF_DROP; 
         }
-        if (strcmp(ifname, "") != 0){   
-            hw = neigh_lookup(&arp_tbl, &sip, dev);   
-            if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
-                status = NF_DROP;
-            }
-            
-            entry = find_dhcp_snooping_entry(sip);
-            if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
-                printk(KERN_INFO "kdai:  ARP spoofing detected on %s from %pM\n", ifname, sha);
-                status = NF_DROP;
-            } else status = NF_ACCEPT;             
-        }
+   
     } else status = NF_DROP;
     
     return status;
