@@ -117,16 +117,19 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     unsigned char *arp_ptr;
     unsigned char *sha,*tha;
     u_int32_t sip,tip;
-    struct neighbour *hw;
-    struct dhcp_snooping_entry *entry;
-    struct net_device *dev = skb->dev;
-    struct in_device *indev = in_dev_get(dev);
-    struct in_ifaddr *ifa = indev->ifa_list;
+    struct net_device *dev;
+    const struct in_device *indev;
+    const struct in_ifaddr *ifa;
+    const struct neighbour *hw;
+    const struct dhcp_snooping_entry *entry;
     unsigned int status = NF_ACCEPT;
       
     if (unlikely(!skb))
         return NF_DROP;
 
+    dev = skb->dev;
+    indev = in_dev_get(dev);
+    
     arp = arp_hdr(skb);
     arp_ptr = (unsigned char *)(arp + 1);
     sha	= arp_ptr;
@@ -138,7 +141,7 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     memcpy(&tip, arp_ptr, 4);
 
     if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip)) {
-        for (;ifa; ifa = ifa->ifa_next) {
+        for (ifa = indev->ifa_list; ifa; ifa = ifa->ifa_next) {
             if (ifa->ifa_address == tip) {
                 hw = neigh_lookup(&arp_tbl, &sip, dev);   
                 if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
