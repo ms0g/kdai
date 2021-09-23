@@ -106,8 +106,8 @@ static struct dhcp_snooping_entry *find_dhcp_snooping_entry(u_int32_t ip);
 static void delete_dhcp_snooping_entry(u_int32_t ip);
 static void clean_dhcp_snooping_table(void);
 
-static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op, 
-                        unsigned char *sha, u_int32_t sip, unsigned char *tha, u_int32_t tip);
+static int arp_is_valid(
+    struct sk_buff *skb, u_int16_t ar_op, unsigned char *sha, u_int32_t sip, unsigned char *tha, u_int32_t tip);
 static int dhcp_is_valid(struct sk_buff *skb);
 static int dhc_th_func(void *arg);
 
@@ -201,8 +201,8 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
                         entry->lease_time = ntohl(lease_time);
                         entry->expires = ts.tv_sec + ntohl(lease_time);
                     } else {
-                        insert_dhcp_snooping_entry(payload->chaddr, payload->yiaddr, ntohl(lease_time), 
-                                                    ts.tv_sec + ntohl(lease_time));
+                        insert_dhcp_snooping_entry(
+                            payload->chaddr, payload->yiaddr, ntohl(lease_time), ts.tv_sec + ntohl(lease_time));
                     }
                     break;
                 }
