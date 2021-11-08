@@ -1,7 +1,13 @@
-obj-m := kdai.o
+MODULE=kdai
+PWD := $(shell pwd)
+KERNELRELEASE := $(shell uname -r)
+KDIR := /lib/modules/${KERNELRELEASE}/build
+MDIR := /lib/modules/${KERNELRELEASE}
+obj-m := ${MODULE}.o
+${MODULE}-objs := ${MODULE}.o dhcp.o
 
 all:
-	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
+	make -C ${KDIR} M=${PWD} modules
 	rm -r -f *.mod.c .*.cmd *.symvers *.o
 clean:
-	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) clean
+	make -C  ${KDIR} M=${PWD} clean
