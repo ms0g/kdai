@@ -1,3 +1,6 @@
+#ifndef COMMON_H
+#define COMMON_H
+
 #include <linux/init.h>
 #include <linux/spinlock.h>
 #include <linux/kthread.h>
@@ -13,4 +16,6 @@
 #include <linux/inetdevice.h>
 #include <net/arp.h>
 #include <net/udp.h>
+
+#endif
 
