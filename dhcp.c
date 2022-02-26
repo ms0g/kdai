@@ -65,7 +65,7 @@ void clean_dhcp_snooping_table(void) {
 }
 
 
-int dhc_th_func(void *arg) {
+int dhcp_thread_handler(void *arg) {
     struct list_head* curr, *next;
     struct dhcp_snooping_entry *entry;
     unsigned long flags;

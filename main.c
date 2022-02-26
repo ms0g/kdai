@@ -17,14 +17,14 @@ static int arp_is_valid(
 static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state) {
     struct arphdr *arp;
     unsigned char *arp_ptr;
-    unsigned char *sha,*tha;
-    u32 sip,tip;
+    unsigned char *sha, *tha;
     struct net_device *dev;
     const struct in_device *indev;
     const struct in_ifaddr *ifa;
     const struct neighbour *hw;
     const struct dhcp_snooping_entry *entry;
     unsigned int status = NF_ACCEPT;
+    u32 sip, tip;
       
     if (unlikely(!skb))
         return NF_DROP;
@@ -43,23 +43,23 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     memcpy(&tip, arp_ptr, 4);
 
     if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip)) {
-        for (ifa = indev->ifa_list; 
-            ifa; 
-            ifa = ifa->ifa_next) {
-                if (ifa->ifa_address == tip) {
-                    hw = neigh_lookup(&arp_tbl, &sip, dev);   
-                    if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
-                        status = NF_DROP;
-                    }
-                
-                    entry = find_dhcp_snooping_entry(sip);
-                    if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
-                        printk(KERN_INFO "kdai:  ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
-                        status = NF_DROP;
-                    } else status = NF_ACCEPT;             
+        for (ifa = indev->ifa_list; ifa; ifa = ifa->ifa_next) {
+            if (ifa->ifa_address == tip) {
+                // querying arp table
+                hw = neigh_lookup(&arp_tbl, &sip, dev);
+                if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
+                    status = NF_DROP;
+                    neigh_release(hw);
+                }
+                // querying dhcp snooping table
+                entry = find_dhcp_snooping_entry(sip);
+                if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
+                    printk(KERN_INFO "kdai:  ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
+                    status = NF_DROP;
+                } else status = NF_ACCEPT;             
         
-                    break;
-                } else status = NF_DROP; 
+                break;
+            } else status = NF_DROP; 
         }
    
     } else status = NF_DROP;
@@ -91,13 +91,11 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
             
             switch (dhcp_packet_type) {
                 case DHCP_ACK:{
-                    for (opt = payload->bp_options; 
-                        *opt != DHCP_OPTION_END; 
-                        opt += opt[1] + 2) {
-                            if (*opt == DHCP_OPTION_LEASE_TIME) {
-                                memcpy(&lease_time, &opt[2], 4);
-                                break;
-                            }
+                    for (opt = payload->bp_options; *opt != DHCP_OPTION_END; opt += opt[1] + 2) {
+                        if (*opt == DHCP_OPTION_LEASE_TIME) {
+                            memcpy(&lease_time, &opt[2], 4);
+                            break;
+                        }
                     }
                     printk(KERN_INFO "kdai:  DHCPACK of %pI4\n", &payload->yiaddr);
                     getnstimeofday(&ts);
@@ -183,8 +181,8 @@ static int __init kdai_init(void) {
     nf_register_hook(ipho);
 
     spin_lock_init(&slock);
-    dhc_thread = kthread_run(dhc_th_func, NULL, "DHCP Thread");
-    if(dhc_thread) {
+    dhcp_thread = kthread_run(dhcp_thread_handler, NULL, "DHCP Thread");
+    if(dhcp_thread) {
         printk(KERN_INFO"kdai:  DHCP Thread Created Successfully...\n");
     } else {
         printk(KERN_INFO"kdai:  Cannot create kthread\n");
@@ -199,7 +197,7 @@ static void __exit kdai_exit(void) {
     nf_unregister_hook(ipho);
     kfree(ipho);
     clean_dhcp_snooping_table();
-    kthread_stop(dhc_thread);
+    kthread_stop(dhcp_thread);
 }
 
 module_init(kdai_init);
