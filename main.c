@@ -42,7 +42,7 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     arp_ptr += dev->addr_len;
     memcpy(&tip, arp_ptr, 4);
 
-    if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip)) {
+    if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) != -1) {
         for (ifa = indev->ifa_list; ifa; ifa = ifa->ifa_next) {
             if (ifa->ifa_address == tip) {
                 // querying arp table
@@ -128,7 +128,7 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
 
 static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op, 
                         unsigned char *sha, u32 sip, unsigned char *tha, u32 tip)  {
-    int status = 1;
+    int status = 0;
     struct ethhdr *eth;
     unsigned char shaddr[ETH_ALEN],dhaddr[ETH_ALEN];
 
@@ -138,10 +138,11 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
 
     switch (ar_op) {
         case ARPOP_REQUEST:{
-            if ((memcmp(sha, shaddr, ETH_ALEN) != 0) || !eth_is_bcast(dhaddr) || 
-                ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip)) {
+            if ((memcmp(sha, shaddr, ETH_ALEN) != 0) || 
+                ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip) || 
+                ipv4_is_multicast(tip) || ipv4_is_loopback(tip) || ipv4_is_zeronet(tip)) {
                     printk(KERN_INFO "kdai:  Invalid ARP request from %pM\n", sha);
-                    status = 0;
+                    status = -1;
             }
             break;
         }
@@ -150,7 +151,7 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
                 ipv4_is_multicast(tip) || ipv4_is_loopback(tip) || ipv4_is_zeronet(tip) || 
                 ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip)) {
                     printk(KERN_INFO "kdai:  Invalid ARP reply from %pM\n", sha);
-                    status = 0;
+                    status = -1;
             }
             break;
         }
