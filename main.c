@@ -1,5 +1,6 @@
 
 #include "dhcp.h"
+#include "errno.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("M. Sami GURPINAR <sami.gurpinar@gmail.com>");
@@ -11,20 +12,20 @@ MODULE_VERSION("0.1");
 static struct nf_hook_ops *arpho = NULL;
 static struct nf_hook_ops *ipho = NULL;
 
-static int arp_is_valid(
-    struct sk_buff *skb, u16 ar_op, unsigned char *sha, u32 sip, unsigned char *tha, u32 tip);
+static int arp_is_valid(struct sk_buff* skb, const u16 ar_op, const unsigned char* sha, 
+                        const u32 sip, const unsigned char* tha, const u32 tip);
 
-static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state) {
+static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
     struct arphdr *arp;
     unsigned char *arp_ptr;
-    unsigned char *sha, *tha;
+    const unsigned char *sha, *tha;
     struct net_device *dev;
     const struct in_device *indev;
     const struct in_ifaddr *ifa;
     const struct neighbour *hw;
     const struct dhcp_snooping_entry *entry;
     unsigned int status = NF_ACCEPT;
-    u32 sip, tip;
+    const u32 sip, tip;
       
     if (unlikely(!skb))
         return NF_DROP;
@@ -42,7 +43,7 @@ static unsigned int arp_hook(void *priv, struct sk_buff *skb, const struct nf_ho
     arp_ptr += dev->addr_len;
     memcpy(&tip, arp_ptr, 4);
 
-    if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) != -1) {
+    if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) == 0) {
         for (ifa = indev->ifa_list; ifa; ifa = ifa->ifa_next) {
             if (ifa->ifa_address == tip) {
                 // querying arp table
@@ -126,9 +127,9 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
 }
 
 
-static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op, 
-                        unsigned char *sha, u32 sip, unsigned char *tha, u32 tip)  {
-    int status = 0;
+static int arp_is_valid(struct sk_buff *skb, const u16 ar_op, const unsigned char *sha, 
+                                const u32 sip, const unsigned char *tha, const u32 tip)  {
+    int status = SUCCESS;
     struct ethhdr *eth;
     unsigned char shaddr[ETH_ALEN],dhaddr[ETH_ALEN];
 
@@ -136,29 +137,49 @@ static int arp_is_valid(struct sk_buff *skb, u_int16_t ar_op,
     memcpy(shaddr, eth->h_source, ETH_ALEN);
     memcpy(dhaddr, eth->h_dest, ETH_ALEN);
 
-    switch (ar_op) {
-        case ARPOP_REQUEST:{
-            if ((memcmp(sha, shaddr, ETH_ALEN) != 0) || 
-                ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip) || 
-                ipv4_is_multicast(tip) || ipv4_is_loopback(tip) || ipv4_is_zeronet(tip)) {
-                    printk(KERN_INFO "kdai:  Invalid ARP request from %pM\n", sha);
-                    status = -1;
-            }
-            break;
-        }
-        case ARPOP_REPLY:{
-            if ((memcmp(tha, dhaddr, ETH_ALEN) != 0) || (memcmp(sha, shaddr, ETH_ALEN) != 0) || 
-                ipv4_is_multicast(tip) || ipv4_is_loopback(tip) || ipv4_is_zeronet(tip) || 
-                ipv4_is_multicast(sip) || ipv4_is_loopback(sip) || ipv4_is_zeronet(sip)) {
-                    printk(KERN_INFO "kdai:  Invalid ARP reply from %pM\n", sha);
-                    status = -1;
-            }
-            break;
-        }
-        default:
-            break;
+    if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
+        printk(KERN_INFO "kdai:  the sender MAC address %pM in the message body is NOT identical 
+                                    to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
+        status = -EHWADDR;
+    } 
+
+    if (ipv4_is_multicast(sip)) {
+        printk(KERN_INFO "kdai:  the sender ip address %pI4 is multicast\n", sip);
+        status = -EIPADDR;
     }
 
+    if (ipv4_is_loopback(sip)) {
+        printk(KERN_INFO "kdai:  the sender ip address %pI4 is loopback\n", sip);
+        status = -EIPADDR;
+    }
+
+    if (ipv4_is_zeronet(sip)) {
+        printk(KERN_INFO "kdai:  the sender ip address %pI4 is zeronet\n", sip);
+        status = -EIPADDR;
+    } 
+            
+    if (ipv4_is_multicast(tip)) {
+        printk(KERN_INFO "kdai:  the target ip address %pI4 is multicast\n", tip);
+        status = -EIPADDR;
+    }
+            
+    if (ipv4_is_loopback(tip)) {
+        printk(KERN_INFO "kdai:  the target ip address %pI4 is loopback\n", tip);
+        status = -EIPADDR;
+    }
+            
+    if (ipv4_is_zeronet(tip)) {
+        printk(KERN_INFO "kdai:  the target ip address %pI4 is zeronet\n", tip);
+        status = -EIPADDR;
+    }
+
+    if (ar_op == ARPOP_REPLY) {
+         if (memcmp(tha, dhaddr, ETH_ALEN) != 0) {
+            printk(KERN_INFO "kdai:  the target MAC address %pM in the message body is NOT identical 
+                                    to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
+            status = -EHWADDR;
+         }
+    }
     return status;
 
 }
