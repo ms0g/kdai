@@ -3,12 +3,12 @@
 
 #include "common.h"
 
-#define DHCP_CHADDR_LEN     16
-#define DHCP_SNAME_LEN      64
-#define DHCP_FILE_LEN       128
+#define DHCP_CHADDR_LEN             16
+#define DHCP_SNAME_LEN              64
+#define DHCP_FILE_LEN               128
 
-#define DHCP_SERVER_PORT    67
-#define DHCP_CLIENT_PORT    68
+#define DHCP_SERVER_PORT            67
+#define DHCP_CLIENT_PORT            68
 
 #define DHCP_OPTION_MESSAGE_TYPE    0x35
 #define DHCP_OPTION_LEASE_TIME      0x33
@@ -58,14 +58,15 @@ struct dhcp_snooping_entry {
 };
 
 LIST_HEAD(dhcp_snooping_list);
-extern struct task_struct *dhcp_thread;
-extern spinlock_t slock;
+
+extern struct task_struct* dhcp_thread;
+DEFINE_SPINLOCK(slock);
 
 
-int dhcp_is_valid(struct sk_buff *skb);
-void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time);
-struct dhcp_snooping_entry *find_dhcp_snooping_entry(u32 ip);
+int dhcp_is_valid(struct sk_buff* skb);
+void insert_dhcp_snooping_entry(u8* mac, u32 ip, u32 lease_time, u32 expire_time);
+struct dhcp_snooping_entry* find_dhcp_snooping_entry(u32 ip);
 void delete_dhcp_snooping_entry(u32 ip);
 void clean_dhcp_snooping_table(void);
-int dhcp_thread_handler(void *arg);
+int dhcp_thread_handler(void* arg);
 #endif

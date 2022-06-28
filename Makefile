@@ -9,5 +9,9 @@ ${MODULE}-objs := ${MODULE}.o dhcp.o
 all:
 	make -C ${KDIR} M=${PWD} modules
 	rm -r -f *.mod.c .*.cmd *.symvers *.o
+install:
+	sudo insmod kdai.ko
+remove:
+	sudo rmmod kdai.ko
 clean:
 	make -C  ${KDIR} M=${PWD} clean

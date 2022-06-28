@@ -9,20 +9,20 @@ MODULE_VERSION("0.1");
 
 #define eth_is_bcast(addr) (((addr)[0] & 0xffff) && ((addr)[2] & 0xffff) && ((addr)[4] & 0xffff))
 
-static struct nf_hook_ops *arpho = NULL;
-static struct nf_hook_ops *ipho = NULL;
+static struct nf_hook_ops* arpho = NULL;
+static struct nf_hook_ops* ipho = NULL;
 
 static int arp_is_valid(struct sk_buff* skb, const u16 ar_op, const unsigned char* sha, 
                         const u32 sip, const unsigned char* tha, const u32 tip);
 
 static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
-    struct arphdr *arp;
-    unsigned char *arp_ptr;
-    const unsigned char *sha, *tha;
-    struct net_device *dev;
-    const struct in_device *indev;
-    const struct in_ifaddr *ifa;
-    const struct neighbour *hw;
+    const struct arphdr* arp;
+    const unsigned char* arp_ptr;
+    const unsigned char* sha, tha;
+    const struct net_device* dev;
+    const struct in_device* indev;
+    const struct in_ifaddr* ifa;
+    const struct neighbour* hw;
     const struct dhcp_snooping_entry *entry;
     unsigned int status = NF_ACCEPT;
     const u32 sip, tip;
@@ -69,14 +69,14 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
 }
 
 
-static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state) {
-    struct udphdr *udp;
-    struct dhcp *payload;
-    unsigned char *opt;
+static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
+    const struct udphdr* udp;
+    const struct dhcp* payload;
+    const unsigned char *opt;
     u8 dhcp_packet_type;
     u32 lease_time;
     struct timespec ts;
-    struct dhcp_snooping_entry *entry;
+    struct dhcp_snooping_entry* entry;
     unsigned int status = NF_ACCEPT;
 
     if (unlikely(!skb))
@@ -87,7 +87,7 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
     if (udp->source == htons(DHCP_SERVER_PORT) || udp->source == htons(DHCP_CLIENT_PORT)) {
         payload = (struct dhcp *) ((unsigned char *)udp + sizeof(struct udphdr));
         
-        if (dhcp_is_valid(skb)) {
+        if (dhcp_is_valid(skb) == 0) {
             memcpy(&dhcp_packet_type, &payload->bp_options[2], 1);
             
             switch (dhcp_packet_type) {
@@ -111,8 +111,24 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
                     }
                     break;
                 }
+                
+                case DHCP_NAK:{
+                    printk(KERN_INFO "kdai:  DHCPNAK of %pI4\n", &payload->yiaddr);
+                    entry = find_dhcp_snooping_entry(payload->yiaddr);
+                    if (entry) {
+                        remove_dhcp_snooping_entry(entry);
+                    }
+                    break;
+                }
+
                 case DHCP_RELEASE:{
                     printk(KERN_INFO "kdai:  DHCPRELEASE of %pI4\n", &payload->ciaddr);
+                    delete_dhcp_snooping_entry(payload->ciaddr);
+                    break;
+                }
+
+                case DHCP_DECLINE:{
+                    printk(KERN_INFO "kdai:  DHCPDECLINE of %pI4\n", &payload->ciaddr);
                     delete_dhcp_snooping_entry(payload->ciaddr);
                     break;
                 }
@@ -127,10 +143,10 @@ static unsigned int ip_hook(void *priv, struct sk_buff *skb, const struct nf_hoo
 }
 
 
-static int arp_is_valid(struct sk_buff *skb, const u16 ar_op, const unsigned char *sha, 
-                                const u32 sip, const unsigned char *tha, const u32 tip)  {
+static int arp_is_valid(struct sk_buff* skb, const u16 ar_op, const unsigned char* sha, 
+                                const u32 sip, const unsigned char* tha, const u32 tip)  {
     int status = SUCCESS;
-    struct ethhdr *eth;
+    const struct ethhdr* eth;
     unsigned char shaddr[ETH_ALEN],dhaddr[ETH_ALEN];
 
     eth = eth_hdr(skb);
@@ -138,44 +154,43 @@ static int arp_is_valid(struct sk_buff *skb, const u16 ar_op, const unsigned cha
     memcpy(dhaddr, eth->h_dest, ETH_ALEN);
 
     if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
-        printk(KERN_INFO "kdai:  the sender MAC address %pM in the message body is NOT identical 
-                                    to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
+        printk(KERN_ERR "kdai:  the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
         status = -EHWADDR;
     } 
 
     if (ipv4_is_multicast(sip)) {
-        printk(KERN_INFO "kdai:  the sender ip address %pI4 is multicast\n", sip);
+        printk(KERN_ERR "kdai:  the sender ip address %pI4 is multicast\n", sip);
         status = -EIPADDR;
     }
 
     if (ipv4_is_loopback(sip)) {
-        printk(KERN_INFO "kdai:  the sender ip address %pI4 is loopback\n", sip);
+        printk(KERN_ERR "kdai:  the sender ip address %pI4 is loopback\n", sip);
         status = -EIPADDR;
     }
 
     if (ipv4_is_zeronet(sip)) {
-        printk(KERN_INFO "kdai:  the sender ip address %pI4 is zeronet\n", sip);
+        printk(KERN_ERR "kdai:  the sender ip address %pI4 is zeronet\n", sip);
         status = -EIPADDR;
     } 
             
     if (ipv4_is_multicast(tip)) {
-        printk(KERN_INFO "kdai:  the target ip address %pI4 is multicast\n", tip);
+        printk(KERN_ERR "kdai:  the target ip address %pI4 is multicast\n", tip);
         status = -EIPADDR;
     }
             
     if (ipv4_is_loopback(tip)) {
-        printk(KERN_INFO "kdai:  the target ip address %pI4 is loopback\n", tip);
+        printk(KERN_ERR "kdai:  the target ip address %pI4 is loopback\n", tip);
         status = -EIPADDR;
     }
             
     if (ipv4_is_zeronet(tip)) {
-        printk(KERN_INFO "kdai:  the target ip address %pI4 is zeronet\n", tip);
+        printk(KERN_ERR "kdai:  the target ip address %pI4 is zeronet\n", tip);
         status = -EIPADDR;
     }
 
     if (ar_op == ARPOP_REPLY) {
          if (memcmp(tha, dhaddr, ETH_ALEN) != 0) {
-            printk(KERN_INFO "kdai:  the target MAC address %pM in the message body is NOT identical 
+            printk(KERN_ERR "kdai:  the target MAC address %pM in the message body is NOT identical 
                                     to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
             status = -EHWADDR;
          }
@@ -201,8 +216,7 @@ static int __init kdai_init(void) {
     ipho->pf = NFPROTO_IPV4;                    /* IP */
     ipho->priority = NF_IP_PRI_FIRST;
     nf_register_hook(ipho);
-
-    spin_lock_init(&slock);
+    
     dhcp_thread = kthread_run(dhcp_thread_handler, NULL, "DHCP Thread");
     if(dhcp_thread) {
         printk(KERN_INFO"kdai:  DHCP Thread Created Successfully...\n");
