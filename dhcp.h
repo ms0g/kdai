@@ -57,16 +57,17 @@ struct dhcp_snooping_entry {
     struct list_head list;
 };
 
-LIST_HEAD(dhcp_snooping_list);
-
 extern struct task_struct* dhcp_thread;
-DEFINE_SPINLOCK(slock);
-
 
 int dhcp_is_valid(struct sk_buff* skb);
+
 void insert_dhcp_snooping_entry(u8* mac, u32 ip, u32 lease_time, u32 expire_time);
+
 struct dhcp_snooping_entry* find_dhcp_snooping_entry(u32 ip);
+
 void delete_dhcp_snooping_entry(u32 ip);
+
 void clean_dhcp_snooping_table(void);
+
 int dhcp_thread_handler(void* arg);
 #endif
