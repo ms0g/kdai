@@ -2,6 +2,7 @@
 #include "errno.h"
 
 DEFINE_SPINLOCK(slock);
+
 LIST_HEAD(dhcp_snooping_list);
 
 void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time) {

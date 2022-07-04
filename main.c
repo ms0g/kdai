@@ -155,44 +155,44 @@ static int arp_is_valid(struct sk_buff* skb, const u16 ar_op, const unsigned cha
 
     if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
         printk(KERN_ERR "kdai:  the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
-        status = -EHWADDR;
+        return -EHWADDR;
     } 
 
     if (ipv4_is_multicast(sip)) {
         printk(KERN_ERR "kdai:  the sender ip address %pI4 is multicast\n", sip);
-        status = -EIPADDR;
+        return -EIPADDR;
     }
 
     if (ipv4_is_loopback(sip)) {
         printk(KERN_ERR "kdai:  the sender ip address %pI4 is loopback\n", sip);
-        status = -EIPADDR;
+        return -EIPADDR;
     }
 
     if (ipv4_is_zeronet(sip)) {
         printk(KERN_ERR "kdai:  the sender ip address %pI4 is zeronet\n", sip);
-        status = -EIPADDR;
+        return -EIPADDR;
     } 
             
     if (ipv4_is_multicast(tip)) {
         printk(KERN_ERR "kdai:  the target ip address %pI4 is multicast\n", tip);
-        status = -EIPADDR;
+        return -EIPADDR;
     }
             
     if (ipv4_is_loopback(tip)) {
         printk(KERN_ERR "kdai:  the target ip address %pI4 is loopback\n", tip);
-        status = -EIPADDR;
+        return -EIPADDR;
     }
             
     if (ipv4_is_zeronet(tip)) {
         printk(KERN_ERR "kdai:  the target ip address %pI4 is zeronet\n", tip);
-        status = -EIPADDR;
+        return -EIPADDR;
     }
 
     if (ar_op == ARPOP_REPLY) {
          if (memcmp(tha, dhaddr, ETH_ALEN) != 0) {
             printk(KERN_ERR "kdai:  the target MAC address %pM in the message body is NOT identical 
                                     to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
-            status = -EHWADDR;
+            return -EHWADDR;
          }
     }
     return status;
