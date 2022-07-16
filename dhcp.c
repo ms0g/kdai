@@ -5,6 +5,8 @@ DEFINE_SPINLOCK(slock);
 
 LIST_HEAD(dhcp_snooping_list);
 
+struct task_struct* dhcp_thread = NULL;
+
 void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time) {
     struct dhcp_snooping_entry *entry;
 
@@ -90,10 +92,10 @@ int dhcp_thread_handler(void *arg) {
 
 int dhcp_is_valid(struct sk_buff* skb) {
     int status = SUCCESS;
-    const struct udphdr* udp;
-    const struct dhcp* payload;
+    struct udphdr* udp;
+    struct dhcp* payload;
+    struct ethhdr* eth;
     u8 dhcp_packet_type;
-    const struct ethhdr* eth;
     unsigned char shaddr[ETH_ALEN];
 
     eth = eth_hdr(skb);

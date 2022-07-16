@@ -12,20 +12,20 @@ MODULE_VERSION("0.1");
 static struct nf_hook_ops* arpho = NULL;
 static struct nf_hook_ops* ipho = NULL;
 
-static int arp_is_valid(struct sk_buff* skb, const u16 ar_op, const unsigned char* sha, 
-                        const u32 sip, const unsigned char* tha, const u32 tip);
+static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha, 
+                        u32 sip, unsigned char* tha, u32 tip);
 
 static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
-    const struct arphdr* arp;
-    const unsigned char* arp_ptr;
-    const unsigned char* sha, tha;
-    const struct net_device* dev;
-    const struct in_device* indev;
-    const struct in_ifaddr* ifa;
-    const struct neighbour* hw;
-    const struct dhcp_snooping_entry *entry;
+    struct arphdr* arp;
+    unsigned char* arp_ptr;
+    unsigned char* sha, *tha;
+    struct net_device* dev;
+    struct in_device* indev;
+    struct in_ifaddr* ifa;
+    struct neighbour* hw;
+    struct dhcp_snooping_entry* entry;
     unsigned int status = NF_ACCEPT;
-    const u32 sip, tip;
+    u32 sip, tip;
       
     if (unlikely(!skb))
         return NF_DROP;
@@ -70,9 +70,9 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
 
 
 static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
-    const struct udphdr* udp;
-    const struct dhcp* payload;
-    const unsigned char *opt;
+    struct udphdr* udp;
+    struct dhcp* payload;
+    unsigned char* opt;
     u8 dhcp_packet_type;
     u32 lease_time;
     struct timespec ts;
@@ -116,7 +116,7 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                     printk(KERN_INFO "kdai:  DHCPNAK of %pI4\n", &payload->yiaddr);
                     entry = find_dhcp_snooping_entry(payload->yiaddr);
                     if (entry) {
-                        remove_dhcp_snooping_entry(entry);
+                        delete_dhcp_snooping_entry(entry->ip);
                     }
                     break;
                 }
@@ -143,8 +143,8 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
 }
 
 
-static int arp_is_valid(struct sk_buff* skb, const u16 ar_op, const unsigned char* sha, 
-                                const u32 sip, const unsigned char* tha, const u32 tip)  {
+static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha, 
+                                u32 sip, unsigned char* tha, u32 tip)  {
     int status = SUCCESS;
     const struct ethhdr* eth;
     unsigned char shaddr[ETH_ALEN],dhaddr[ETH_ALEN];
@@ -159,39 +159,39 @@ static int arp_is_valid(struct sk_buff* skb, const u16 ar_op, const unsigned cha
     } 
 
     if (ipv4_is_multicast(sip)) {
-        printk(KERN_ERR "kdai:  the sender ip address %pI4 is multicast\n", sip);
+        printk(KERN_ERR "kdai:  the sender ip address %pI4 is multicast\n", &sip);
         return -EIPADDR;
     }
 
     if (ipv4_is_loopback(sip)) {
-        printk(KERN_ERR "kdai:  the sender ip address %pI4 is loopback\n", sip);
+        printk(KERN_ERR "kdai:  the sender ip address %pI4 is loopback\n", &sip);
         return -EIPADDR;
     }
 
     if (ipv4_is_zeronet(sip)) {
-        printk(KERN_ERR "kdai:  the sender ip address %pI4 is zeronet\n", sip);
+        printk(KERN_ERR "kdai:  the sender ip address %pI4 is zeronet\n", &sip);
         return -EIPADDR;
     } 
             
     if (ipv4_is_multicast(tip)) {
-        printk(KERN_ERR "kdai:  the target ip address %pI4 is multicast\n", tip);
+        printk(KERN_ERR "kdai:  the target ip address %pI4 is multicast\n", &tip);
         return -EIPADDR;
     }
             
     if (ipv4_is_loopback(tip)) {
-        printk(KERN_ERR "kdai:  the target ip address %pI4 is loopback\n", tip);
+        printk(KERN_ERR "kdai:  the target ip address %pI4 is loopback\n", &tip);
         return -EIPADDR;
     }
             
     if (ipv4_is_zeronet(tip)) {
-        printk(KERN_ERR "kdai:  the target ip address %pI4 is zeronet\n", tip);
+        printk(KERN_ERR "kdai:  the target ip address %pI4 is zeronet\n", &tip);
         return -EIPADDR;
     }
 
     if (ar_op == ARPOP_REPLY) {
          if (memcmp(tha, dhaddr, ETH_ALEN) != 0) {
-            printk(KERN_ERR "kdai:  the target MAC address %pM in the message body is NOT identical 
-                                    to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
+            printk(KERN_ERR "kdai:  the target MAC address %pM in the message body is NOT identical" 
+                            "to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
             return -EHWADDR;
          }
     }
