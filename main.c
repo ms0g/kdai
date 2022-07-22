@@ -34,7 +34,7 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     indev = in_dev_get(dev);
     
     arp = arp_hdr(skb);
-    arp_ptr = (unsigned char *)(arp + 1);
+    arp_ptr = (unsigned char*)(arp + 1);
     sha	= arp_ptr;
     arp_ptr += dev->addr_len;
     memcpy(&sip, arp_ptr, 4);
@@ -55,7 +55,7 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
                 // querying dhcp snooping table
                 entry = find_dhcp_snooping_entry(sip);
                 if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
-                    printk(KERN_INFO "kdai:  ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
+                    printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
                     status = NF_DROP;
                 } else status = NF_ACCEPT;             
         
@@ -85,7 +85,7 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
     udp = udp_hdr(skb);
     
     if (udp->source == htons(DHCP_SERVER_PORT) || udp->source == htons(DHCP_CLIENT_PORT)) {
-        payload = (struct dhcp *) ((unsigned char *)udp + sizeof(struct udphdr));
+        payload = (struct dhcp*) ((unsigned char *)udp + sizeof(struct udphdr));
         
         if (dhcp_is_valid(skb) == 0) {
             memcpy(&dhcp_packet_type, &payload->bp_options[2], 1);
@@ -98,7 +98,7 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                             break;
                         }
                     }
-                    printk(KERN_INFO "kdai:  DHCPACK of %pI4\n", &payload->yiaddr);
+                    printk(KERN_INFO "kdai: DHCPACK of %pI4\n", &payload->yiaddr);
                     getnstimeofday(&ts);
                     entry = find_dhcp_snooping_entry(payload->yiaddr);
                     if (entry) {
@@ -113,7 +113,7 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                 }
                 
                 case DHCP_NAK:{
-                    printk(KERN_INFO "kdai:  DHCPNAK of %pI4\n", &payload->yiaddr);
+                    printk(KERN_INFO "kdai: DHCPNAK of %pI4\n", &payload->yiaddr);
                     entry = find_dhcp_snooping_entry(payload->yiaddr);
                     if (entry) {
                         delete_dhcp_snooping_entry(entry->ip);
@@ -122,13 +122,13 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                 }
 
                 case DHCP_RELEASE:{
-                    printk(KERN_INFO "kdai:  DHCPRELEASE of %pI4\n", &payload->ciaddr);
+                    printk(KERN_INFO "kdai: DHCPRELEASE of %pI4\n", &payload->ciaddr);
                     delete_dhcp_snooping_entry(payload->ciaddr);
                     break;
                 }
 
                 case DHCP_DECLINE:{
-                    printk(KERN_INFO "kdai:  DHCPDECLINE of %pI4\n", &payload->ciaddr);
+                    printk(KERN_INFO "kdai: DHCPDECLINE of %pI4\n", &payload->ciaddr);
                     delete_dhcp_snooping_entry(payload->ciaddr);
                     break;
                 }
@@ -154,43 +154,43 @@ static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha,
     memcpy(dhaddr, eth->h_dest, ETH_ALEN);
 
     if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
-        printk(KERN_ERR "kdai:  the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
+        printk(KERN_ERR "kdai: the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
         return -EHWADDR;
     } 
 
     if (ipv4_is_multicast(sip)) {
-        printk(KERN_ERR "kdai:  the sender ip address %pI4 is multicast\n", &sip);
+        printk(KERN_ERR "kdai: the sender ip address %pI4 is multicast\n", &sip);
         return -EIPADDR;
     }
 
     if (ipv4_is_loopback(sip)) {
-        printk(KERN_ERR "kdai:  the sender ip address %pI4 is loopback\n", &sip);
+        printk(KERN_ERR "kdai: the sender ip address %pI4 is loopback\n", &sip);
         return -EIPADDR;
     }
 
     if (ipv4_is_zeronet(sip)) {
-        printk(KERN_ERR "kdai:  the sender ip address %pI4 is zeronet\n", &sip);
+        printk(KERN_ERR "kdai: the sender ip address %pI4 is zeronet\n", &sip);
         return -EIPADDR;
     } 
             
     if (ipv4_is_multicast(tip)) {
-        printk(KERN_ERR "kdai:  the target ip address %pI4 is multicast\n", &tip);
+        printk(KERN_ERR "kdai: the target ip address %pI4 is multicast\n", &tip);
         return -EIPADDR;
     }
             
     if (ipv4_is_loopback(tip)) {
-        printk(KERN_ERR "kdai:  the target ip address %pI4 is loopback\n", &tip);
+        printk(KERN_ERR "kdai: the target ip address %pI4 is loopback\n", &tip);
         return -EIPADDR;
     }
             
     if (ipv4_is_zeronet(tip)) {
-        printk(KERN_ERR "kdai:  the target ip address %pI4 is zeronet\n", &tip);
+        printk(KERN_ERR "kdai: the target ip address %pI4 is zeronet\n", &tip);
         return -EIPADDR;
     }
 
     if (ar_op == ARPOP_REPLY) {
          if (memcmp(tha, dhaddr, ETH_ALEN) != 0) {
-            printk(KERN_ERR "kdai:  the target MAC address %pM in the message body is NOT identical" 
+            printk(KERN_ERR "kdai: the target MAC address %pM in the message body is NOT identical" 
                             "to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
             return -EHWADDR;
          }
@@ -203,6 +203,9 @@ static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha,
 static int __init kdai_init(void) {
     /* Initialize arp netfilter hook */
     arpho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
+    if (unlikely(!arpho))
+        goto err;
+    
     arpho->hook = (nf_hookfn *) arp_hook;       /* hook function */
     arpho->hooknum = NF_ARP_IN;                 /* received packets */
     arpho->pf = NFPROTO_ARP;                    /* ARP */
@@ -211,6 +214,9 @@ static int __init kdai_init(void) {
     
     /* Initialize ip netfilter hook */
     ipho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
+    if (unlikely(!ipho))
+        goto err;
+    
     ipho->hook = (nf_hookfn *) ip_hook;         /* hook function */
     ipho->hooknum = NF_INET_PRE_ROUTING;        /* received packets */
     ipho->pf = NFPROTO_IPV4;                    /* IP */
@@ -219,11 +225,16 @@ static int __init kdai_init(void) {
     
     dhcp_thread = kthread_run(dhcp_thread_handler, NULL, "DHCP Thread");
     if(dhcp_thread) {
-        printk(KERN_INFO"kdai:  DHCP Thread Created Successfully...\n");
+        printk(KERN_INFO"kdai: DHCP Thread Created Successfully...\n");
     } else {
-        printk(KERN_INFO"kdai:  Cannot create kthread\n");
+        printk(KERN_INFO"kdai: Cannot create kthread\n");
+        goto err;
     }
-    return 0; 
+    return 0;   /* success */ 
+err:
+    if (arpho) kfree(arpho);
+    if (ipho) kfree(ipho);
+    return -ENOMEM;    
 }
 
 

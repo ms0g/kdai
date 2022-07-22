@@ -8,9 +8,13 @@ LIST_HEAD(dhcp_snooping_list);
 struct task_struct* dhcp_thread = NULL;
 
 void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time) {
-    struct dhcp_snooping_entry *entry;
+    struct dhcp_snooping_entry* entry;
 
     entry = kmalloc(sizeof(struct dhcp_snooping_entry), GFP_KERNEL);
+    if (!entry) {
+        printk(KERN_INFO "kdai: kmalloc failed\n");
+        return;
+    }
     entry->ip = ip;
     entry->lease_time = lease_time;
     entry->expires = expire_time;
@@ -26,7 +30,7 @@ void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time
 
 struct dhcp_snooping_entry *find_dhcp_snooping_entry(u32 ip) {
     struct list_head* curr,*next;
-    struct dhcp_snooping_entry *entry;
+    struct dhcp_snooping_entry* entry;
 
     spin_lock(&slock);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
@@ -42,7 +46,7 @@ struct dhcp_snooping_entry *find_dhcp_snooping_entry(u32 ip) {
 
 
 void delete_dhcp_snooping_entry(u32 ip) {
-    struct dhcp_snooping_entry *entry = find_dhcp_snooping_entry(ip);
+    struct dhcp_snooping_entry* entry = find_dhcp_snooping_entry(ip);
 
     if (entry) {
         spin_lock(&slock);
@@ -55,7 +59,7 @@ void delete_dhcp_snooping_entry(u32 ip) {
 
 void clean_dhcp_snooping_table(void) {
     struct list_head* curr, *next;
-    struct dhcp_snooping_entry *entry;
+    struct dhcp_snooping_entry* entry;
 
     spin_lock(&slock);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
@@ -69,7 +73,7 @@ void clean_dhcp_snooping_table(void) {
 
 int dhcp_thread_handler(void *arg) {
     struct list_head* curr, *next;
-    struct dhcp_snooping_entry *entry;
+    struct dhcp_snooping_entry* entry;
     struct timespec ts;
 
     while(!kthread_should_stop()) {
@@ -102,7 +106,7 @@ int dhcp_is_valid(struct sk_buff* skb) {
     memcpy(shaddr, eth->h_source, ETH_ALEN);
 
     udp = udp_hdr(skb);
-    payload = (struct dhcp *) ((unsigned char *)udp + sizeof(struct udphdr));
+    payload = (struct dhcp*) ((unsigned char*)udp + sizeof(struct udphdr));
     
     memcpy(&dhcp_packet_type, &payload->bp_options[2], 1);
 
