@@ -1,9 +1,10 @@
 #include "dhcp.h"
 #include "errno.h"
 
-DEFINE_SPINLOCK(slock);
-
 LIST_HEAD(dhcp_snooping_list);
+
+DEFINE_SPINLOCK(slock);
+unsigned long flags;
 
 struct task_struct* dhcp_thread = NULL;
 
@@ -20,27 +21,25 @@ void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time
     entry->expires = expire_time;
     memcpy(entry->mac, mac, ETH_ALEN);
     
-    spin_lock(&slock);
-    
+    spin_lock_irqsave(&slock, flags);
     list_add(&entry->list, &dhcp_snooping_list);
-    
-    spin_unlock(&slock);
+    spin_unlock_irqrestore(&slock, flags);
 }
 
 
-struct dhcp_snooping_entry *find_dhcp_snooping_entry(u32 ip) {
+struct dhcp_snooping_entry* find_dhcp_snooping_entry(u32 ip) {
     struct list_head* curr,*next;
     struct dhcp_snooping_entry* entry;
 
-    spin_lock(&slock);
+    spin_lock_irqsave(&slock, flags);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
         entry = list_entry(curr, struct dhcp_snooping_entry, list);
         if (entry->ip == ip) {
-            spin_unlock(&slock);
+            spin_unlock_irqrestore(&slock, flags);
             return entry;
         }
     }
-    spin_unlock(&slock);
+    spin_unlock_irqrestore(&slock, flags);
     return NULL;
 }
 
@@ -49,10 +48,10 @@ void delete_dhcp_snooping_entry(u32 ip) {
     struct dhcp_snooping_entry* entry = find_dhcp_snooping_entry(ip);
 
     if (entry) {
-        spin_lock(&slock);
+        spin_lock_irqsave(&slock, flags);
         list_del(&entry->list);
         kfree(entry);
-        spin_unlock(&slock);
+        spin_unlock_irqrestore(&slock, flags);
     }   
 }
 
@@ -61,13 +60,13 @@ void clean_dhcp_snooping_table(void) {
     struct list_head* curr, *next;
     struct dhcp_snooping_entry* entry;
 
-    spin_lock(&slock);
+    spin_lock_irqsave(&slock, flags);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
         entry = list_entry(curr, struct dhcp_snooping_entry, list);
         list_del(&entry->list);
         kfree(entry);
     }
-    spin_unlock(&slock);
+    spin_unlock_irqrestore(&slock, flags);
 }
 
 
@@ -78,16 +77,16 @@ int dhcp_thread_handler(void *arg) {
 
     while(!kthread_should_stop()) {
         getnstimeofday(&ts);
-        spin_lock(&slock);
+        spin_lock_irqsave(&slock, flags);
         list_for_each_safe(curr, next, &dhcp_snooping_list) {
             entry = list_entry(curr, struct dhcp_snooping_entry, list);
             if (ts.tv_sec >= entry->expires) {
                 printk(KERN_INFO "kdai:  %pI4 released on %ld\n", &entry->ip, ts.tv_sec);
                 list_del(&entry->list);
                 kfree(entry);
+                spin_unlock_irqrestore(&slock, flags);
             }
         }
-        spin_unlock(&slock);
         msleep(1000);
     }
     return 0;
