@@ -12,6 +12,6 @@ all:
 install:
 	sudo insmod ${MODULE}.ko
 remove:
-	sudo rmmod ${MODULE}.ko
+	sudo rmmod ${MODULE}
 clean:
 	make -C  ${KDIR} M=${PWD} clean

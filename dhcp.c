@@ -4,12 +4,12 @@
 LIST_HEAD(dhcp_snooping_list);
 
 DEFINE_SPINLOCK(slock);
-unsigned long flags;
 
 struct task_struct* dhcp_thread = NULL;
 
 void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time) {
     struct dhcp_snooping_entry* entry;
+    unsigned long flags;
 
     entry = kmalloc(sizeof(struct dhcp_snooping_entry), GFP_KERNEL);
     if (!entry) {
@@ -28,8 +28,9 @@ void insert_dhcp_snooping_entry(u8 *mac, u32 ip, u32 lease_time, u32 expire_time
 
 
 struct dhcp_snooping_entry* find_dhcp_snooping_entry(u32 ip) {
-    struct list_head* curr,*next;
+    struct list_head* curr, *next;
     struct dhcp_snooping_entry* entry;
+    unsigned long flags;
 
     spin_lock_irqsave(&slock, flags);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
@@ -45,6 +46,7 @@ struct dhcp_snooping_entry* find_dhcp_snooping_entry(u32 ip) {
 
 
 void delete_dhcp_snooping_entry(u32 ip) {
+    unsigned long flags;
     struct dhcp_snooping_entry* entry = find_dhcp_snooping_entry(ip);
 
     if (entry) {
@@ -59,6 +61,7 @@ void delete_dhcp_snooping_entry(u32 ip) {
 void clean_dhcp_snooping_table(void) {
     struct list_head* curr, *next;
     struct dhcp_snooping_entry* entry;
+    unsigned long flags;
 
     spin_lock_irqsave(&slock, flags);
     list_for_each_safe(curr, next, &dhcp_snooping_list) {
@@ -73,6 +76,7 @@ void clean_dhcp_snooping_table(void) {
 int dhcp_thread_handler(void *arg) {
     struct list_head* curr, *next;
     struct dhcp_snooping_entry* entry;
+    unsigned long flags;
     struct timespec ts;
 
     while(!kthread_should_stop()) {
