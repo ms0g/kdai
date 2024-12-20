@@ -210,8 +210,12 @@ static int __init kdai_init(void) {
     arpho->hooknum = NF_ARP_IN;                 /* received packets */
     arpho->pf = NFPROTO_ARP;                    /* ARP */
     arpho->priority = NF_IP_PRI_FIRST;
-    nf_register_hook(arpho);
-    
+    #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+        nf_register_net_hook(&init_net, arpho);
+    #else
+        nf_register_hook(arpho);
+    #endif
+
     /* Initialize ip netfilter hook */
     ipho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     if (unlikely(!ipho))
@@ -221,7 +225,11 @@ static int __init kdai_init(void) {
     ipho->hooknum = NF_INET_PRE_ROUTING;        /* received packets */
     ipho->pf = NFPROTO_IPV4;                    /* IP */
     ipho->priority = NF_IP_PRI_FIRST;
-    nf_register_hook(ipho);
+    #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+        nf_register_net_hook(&init_net, ipho);
+    #else
+        nf_register_hook(ipho);
+    #endif
     
     dhcp_thread = kthread_run(dhcp_thread_handler, NULL, "DHCP Thread");
     if(dhcp_thread) {
@@ -239,9 +247,17 @@ err:
 
 
 static void __exit kdai_exit(void) {
-    nf_unregister_hook(arpho);
+    #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+        nf_unregister_net_hook(&init_net, arpho);
+    #else
+        nf_unregister_hook(arpho);
+    #endif
     kfree(arpho);
-    nf_unregister_hook(ipho);
+    #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+        nf_unregister_net_hook(&init_net, ipho);
+    #else
+        nf_unregister_hook(ipho);
+    #endif
     kfree(ipho);
     clean_dhcp_snooping_table();
     kthread_stop(dhcp_thread);
