@@ -77,15 +77,27 @@ int dhcp_thread_handler(void *arg) {
     struct list_head* curr, *next;
     struct dhcp_snooping_entry* entry;
     unsigned long flags;
-    struct timespec ts;
+    #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
+        struct timespec64 ts;
+    #else
+        struct timespec ts;
+    #endif
 
     while(!kthread_should_stop()) {
-        getnstimeofday(&ts);
+        #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
+            ktime_get_real_ts64(&ts);
+        #else
+            getnstimeofday(&ts);
+        #endif
         spin_lock_irqsave(&slock, flags);
         list_for_each_safe(curr, next, &dhcp_snooping_list) {
             entry = list_entry(curr, struct dhcp_snooping_entry, list);
             if (ts.tv_sec >= entry->expires) {
-                printk(KERN_INFO "kdai:  %pI4 released on %ld\n", &entry->ip, ts.tv_sec);
+                #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+                    printk(KERN_INFO "kdai:  %pI4 released on %lld\n", &entry->ip, ts.tv_sec);
+                #else
+                    printk(KERN_INFO "kdai:  %pI4 released on %ld\n", &entry->ip, ts.tv_sec);
+                #endif
                 list_del(&entry->list);
                 kfree(entry);
                 spin_unlock_irqrestore(&slock, flags);

@@ -13,6 +13,7 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_arp.h>
 #include <linux/time.h>
+#include <linux/ktime.h>
 #include <linux/inetdevice.h>
 #include <linux/version.h>
 #include <net/arp.h>
