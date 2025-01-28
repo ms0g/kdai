@@ -88,9 +88,9 @@ int dhcp_thread_handler(void *arg) {
                 printk(KERN_INFO "kdai:  %pI4 released on %ld\n", &entry->ip, ts.tv_sec);
                 list_del(&entry->list);
                 kfree(entry);
-                spin_unlock_irqrestore(&slock, flags);
             }
         }
+        spin_unlock_irqrestore(&slock, flags);
         msleep(1000);
     }
     return 0;
