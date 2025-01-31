@@ -75,7 +75,11 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
     unsigned char* opt;
     u8 dhcp_packet_type;
     u32 lease_time;
-    struct timespec ts;
+    #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
+        struct timespec64 ts;
+    #else
+        struct timespec ts;
+    #endif
     struct dhcp_snooping_entry* entry;
     unsigned int status = NF_ACCEPT;
 
@@ -99,7 +103,11 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                         }
                     }
                     printk(KERN_INFO "kdai: DHCPACK of %pI4\n", &payload->yiaddr);
-                    getnstimeofday(&ts);
+                    #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0)
+                        ktime_get_real_ts64(&ts);
+                    #else
+                        getnstimeofday(&ts);
+                    #endif
                     entry = find_dhcp_snooping_entry(payload->yiaddr);
                     if (entry) {
                         memcpy(entry->mac, payload->chaddr, ETH_ALEN);
