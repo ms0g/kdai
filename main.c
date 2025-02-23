@@ -45,22 +45,55 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     arp_ptr += dev->addr_len;
     memcpy(&tip, arp_ptr, 4);
 
+    printk(KERN_ERR "\nkdai: -- Hooked ARP Packet --\n");
+
     if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) == 0) {
 
+        printk(KERN_INFO "kdai: ARP was VALID\n");
+        printk(KERN_INFO "kdai: Interface Name: %s\n",dev->name);
+
         // querying arp table
+        // Look up the ARP Table to check if there is an existing ARP entry
+        // for the sorce IP address. (Could be real or what the attacker claims to be)
         hw = neigh_lookup(&arp_tbl, &sip, dev);
+        if(hw) {
+            printk(KERN_INFO "kdai: An entry exists in the ARP Snooping Table for the claimed source IP address.\n");
+        }
+        // If we find an entry in the arp table for the source IP address
+        // AND the Mac Address of that entry is different from
+        // the mac address from the ARP packet
         if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
+            printk(KERN_INFO "kdai: A Known Mac Adress with the same Source IP was different from received the received Mac Address\n");
             status = NF_DROP;
             neigh_release(hw);
         }
         // querying dhcp snooping table
+        // Loop up the DHCP Snooping Table to check if there is an entry for the claimed
+        // source IP address in the table
         entry = find_dhcp_snooping_entry(sip);
+        if(entry) {
+            printk(KERN_INFO "kdai: An entry exists in the DHCP Snooping Table for the claimed source IP address.\n");
+        }
+        //If we find an entry AND the Mac Address from the DHCP snooping table does not match
+        //with the MAC address in the ARP packet ARP spoofing detected.
         if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
             printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
             status = NF_DROP;
-        } else status = NF_ACCEPT;             
+        } else {
+            printk(KERN_INFO "kdai: -- ACCEPTING ARP PACKET -- \n");
+            status = NF_ACCEPT;
+        }
    
-    } else status = NF_DROP;
+    } else {
+        printk(KERN_INFO "kdai: ARP was NOT VALID\n");
+        status = NF_DROP;
+    }
+
+    if(status == 1){
+        printk(KERN_INFO "kdai: -- ARP RETURN status was: NF_ACCEPT -- \n\n");
+    } else {
+        printk(KERN_INFO "kdai: -- ARP RETURN status was: NF_DROP -- \n\n");
+    }
     
     return status;
 }
