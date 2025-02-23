@@ -64,7 +64,7 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
         return NF_DROP;  
     }
 
-    
+
     if(strcmp(dev->name,"enp0s7")==0){
         //printk(KERN_INFO "kdai: Matched ma1\n");
         return NF_ACCEPT;
@@ -109,8 +109,18 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     }  
 
     //The entries were different from expected. If Static ACL is configured do not Check DHCP table.
-    //If an exisitng entry in the ARP table did not match. Check dynamic DHCP Configuraiton
     
+    int static_ACL_Enabled = 0; // Default is false
+    if (static_ACL_Enabled){
+        //Accept packets only that were statically configured
+        //Since the previous check failed drop the packet
+        printk(KERN_INFO "kdai: Implicit Drop was Added since static_ACL was Enabled\n");
+        status = NF_DROP;
+        print_status(status);
+        return status;
+    }
+    
+    //If an exisitng entry in the ARP table did not match. Check dynamic DHCP Configuraiton
 
     // Query the dhcp snooping table
     // Look up the DHCP Snooping Table to check if there is an entry for the claimed
