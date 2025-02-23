@@ -46,24 +46,19 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     memcpy(&tip, arp_ptr, 4);
 
     if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) == 0) {
-        for (ifa = indev->ifa_list; ifa; ifa = ifa->ifa_next) {
-            if (ifa->ifa_address == tip) {
-                // querying arp table
-                hw = neigh_lookup(&arp_tbl, &sip, dev);
-                if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
-                    status = NF_DROP;
-                    neigh_release(hw);
-                }
-                // querying dhcp snooping table
-                entry = find_dhcp_snooping_entry(sip);
-                if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
-                    printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
-                    status = NF_DROP;
-                } else status = NF_ACCEPT;             
-        
-                break;
-            } else status = NF_DROP; 
+
+        // querying arp table
+        hw = neigh_lookup(&arp_tbl, &sip, dev);
+        if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
+            status = NF_DROP;
+            neigh_release(hw);
         }
+        // querying dhcp snooping table
+        entry = find_dhcp_snooping_entry(sip);
+        if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
+            printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
+            status = NF_DROP;
+        } else status = NF_ACCEPT;             
    
     } else status = NF_DROP;
     
