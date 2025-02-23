@@ -5,7 +5,7 @@
 #include <linux/netfilter_bridge.h>
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("M. Sami GURPINAR <sami.gurpinar@gmail.com>");
+MODULE_AUTHOR("M. Sami GURPINAR <sami.gurpinar@gmail.com>. Edited by Korel Ucpinar <korelucpinar@gmail.com>");
 MODULE_DESCRIPTION("kdai(Kernel Dynamic ARP Inspection) is a linux kernel module to defend against arp spoofing");
 MODULE_VERSION("0.1"); 
 
@@ -17,84 +17,132 @@ static struct nf_hook_ops* ipho = NULL;
 static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha, 
                         u32 sip, unsigned char* tha, u32 tip);
 
-static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
-    struct arphdr* arp;
-    unsigned char* arp_ptr;
-    unsigned char* sha, *tha;
-    struct net_device* dev;
-    struct in_device* indev;
-    struct in_ifaddr* ifa;
-    struct neighbour* hw;
-    struct dhcp_snooping_entry* entry;
-    unsigned int status = NF_ACCEPT;
-    u32 sip, tip;
-      
-    if (unlikely(!skb))
-        return NF_DROP;
-
-    dev = skb->dev;
-    indev = in_dev_get(dev);
-    
-    arp = arp_hdr(skb);
-    arp_ptr = (unsigned char*)(arp + 1);
-    sha	= arp_ptr;
-    arp_ptr += dev->addr_len;
-    memcpy(&sip, arp_ptr, 4);
-    arp_ptr += 4;
-    tha	= arp_ptr;
-    arp_ptr += dev->addr_len;
-    memcpy(&tip, arp_ptr, 4);
-
-    printk(KERN_ERR "\nkdai: -- Hooked ARP Packet --\n");
-
-    if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) == 0) {
-
-        printk(KERN_INFO "kdai: ARP was VALID\n");
-        printk(KERN_INFO "kdai: Interface Name: %s\n",dev->name);
-
-        // querying arp table
-        // Look up the ARP Table to check if there is an existing ARP entry
-        // for the sorce IP address. (Could be real or what the attacker claims to be)
-        hw = neigh_lookup(&arp_tbl, &sip, dev);
-        if(hw) {
-            printk(KERN_INFO "kdai: An entry exists in the ARP Snooping Table for the claimed source IP address.\n");
-        }
-        // If we find an entry in the arp table for the source IP address
-        // AND the Mac Address of that entry is different from
-        // the mac address from the ARP packet
-        if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
-            printk(KERN_INFO "kdai: A Known Mac Adress with the same Source IP was different from received the received Mac Address\n");
-            status = NF_DROP;
-            neigh_release(hw);
-        }
-        // querying dhcp snooping table
-        // Loop up the DHCP Snooping Table to check if there is an entry for the claimed
-        // source IP address in the table
-        entry = find_dhcp_snooping_entry(sip);
-        if(entry) {
-            printk(KERN_INFO "kdai: An entry exists in the DHCP Snooping Table for the claimed source IP address.\n");
-        }
-        //If we find an entry AND the Mac Address from the DHCP snooping table does not match
-        //with the MAC address in the ARP packet ARP spoofing detected.
-        if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
-            printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
-            status = NF_DROP;
-        } else {
-            printk(KERN_INFO "kdai: -- ACCEPTING ARP PACKET -- \n");
-            status = NF_ACCEPT;
-        }
-   
-    } else {
-        printk(KERN_INFO "kdai: ARP was NOT VALID\n");
-        status = NF_DROP;
-    }
-
+static void print_status(int status){
     if(status == 1){
         printk(KERN_INFO "kdai: -- ARP RETURN status was: NF_ACCEPT -- \n\n");
     } else {
         printk(KERN_INFO "kdai: -- ARP RETURN status was: NF_DROP -- \n\n");
     }
+}
+
+static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
     
+    //Refrence Structure to Standard ARP header used in the linux Kernel
+    struct arp_hdr {
+        __be16 ar_hrd;         /* hardware address format */
+        __be16 ar_pro;         /* protocol address format */
+        u8 ar_hln;             /* length of hardware address */
+        u8 ar_pln;             /* length of protocol address */
+        __be16 ar_op;          /* ARP opcode (command) */
+        u8 ar_sha[6];          /* sender hardware address (MAC) */
+        u8 ar_sip[4];          /* sender protocol address (IP) */
+        u8 ar_tha[6];          /* target hardware address (MAC) */
+        u8 ar_tip[4];          /* target protocol address (IP) */
+    };
+
+    struct ethhdr *eth = eth_hdr(skb);  // Extract the Ethernet header
+    if (ntohs(eth->h_proto) != ETH_P_ARP) {
+        // Not an ARP packet
+        return NF_ACCEPT;
+    }
+
+    struct neighbour* hw;
+    struct dhcp_snooping_entry* entry;
+    struct arp_hdr *arp = (struct arp_hdr *)(eth + 1);  // Skip past the Ethernet header to get the ARP header
+    
+    unsigned char *sha = arp->ar_sha;   // Sender MAC address
+    u32 sip = *(u32 *)(arp->ar_sip);    // Sender IP address
+    unsigned char *tha = arp->ar_tha;   // Target MAC address
+    u32 tip = *(u32 *)(arp->ar_tip);    // Target IP address
+
+    struct net_device *dev = skb->dev;
+    struct in_device *indev = in_dev_get(dev);
+    unsigned int status = NF_ACCEPT;
+
+    if (unlikely(!skb)) {
+        // Drop if skb is NULL
+        return NF_DROP;  
+    }
+
+    
+    if(strcmp(dev->name,"enp0s7")==0){
+        //printk(KERN_INFO "kdai: Matched ma1\n");
+        return NF_ACCEPT;
+    } else {
+        printk(KERN_ERR "\nkdai: -- Hooked ARP Packet --\n");
+    }
+
+    if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) == 0) {
+        //Continue Chekcing
+        printk(KERN_INFO "kdai: ARP was VALID\n");
+    } else {
+        printk(KERN_INFO "kdai: ARP was NOT VALID\n");
+        status = NF_DROP;
+        print_status(status);
+        return status;
+    }
+
+    printk(KERN_INFO "kdai: ARP request from Source IP: %pI4 on Interface Name: %s\n", &sip, dev->name);
+    printk(KERN_INFO "kdai: Interface Name: %s\n", dev->name);
+    printk(KERN_INFO "kdai: Checking an interface on the device\n");
+    
+    /* This is ARP ACL Match! */
+    // Query the ARP table
+    // Look up the ARP Table to check if there is an existing ARP entry
+    // for the sorce IP address. (The source IP could be real or what the attacker claims to be)
+    hw = neigh_lookup(&arp_tbl, &sip, dev);
+    if(hw) {
+        printk(KERN_INFO "kdai: An entry exists in the ARP Snooping Table for the claimed source IP address.\n");
+    } else {
+        printk(KERN_INFO "kdai: NO entry exists in the ARP Snooping Table for the claimed source IP address.\n");
+    }
+
+    // If we find an entry in the arp table for the source IP address
+    // AND the Mac Address of that entry is the same as the mac address from the ARP packet
+    if (hw && memcmp(hw->ha, sha, dev->addr_len) == 0) {
+        printk(KERN_INFO "kdai: A Known Mac Adress with the same Source IP was the same as the received Mac Address\n");
+        //If they are the same accept the packet
+        status = NF_ACCEPT;
+        neigh_release(hw);
+        print_status(status);
+        return status;
+    }  
+
+    //The entries were different from expected. If Static ACL is configured do not Check DHCP table.
+    //If an exisitng entry in the ARP table did not match. Check dynamic DHCP Configuraiton
+    
+
+    // Query the dhcp snooping table
+    // Look up the DHCP Snooping Table to check if there is an entry for the claimed
+    // source IP address in the table.
+    entry = find_dhcp_snooping_entry(sip);
+    if(entry) {
+        printk(KERN_INFO "kdai: An entry exists in the DHCP Snooping Table for the claimed source IP address.\n");
+    } else {
+        printk(KERN_INFO "kdai: NO entry exists in the DHCP Snooping Table for the claimed source IP address.\n");
+        printk(KERN_INFO "kdai: It is not possible to Validate Source.\n");
+        status = NF_DROP;
+        print_status(status);
+        return status;
+    }
+
+    //If we find an entry AND the Mac Address from the DHCP snooping table does not match
+    // with the MAC address in the ARP packet ARP spoofing detected.
+    if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
+        //printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
+        printk(KERN_INFO "ARP spoofing detected on %s, packet droped", dev->name);
+        status = NF_DROP;
+        print_status(status);
+        return status;
+    } else {
+        //The DHCP Snooping table matched.
+        printk(KERN_INFO "kdai: -- ACCEPTING ARP PACKET -- \n");
+        status = NF_ACCEPT;
+        print_status(status);
+        return status;
+    }    
+
+    print_status(status);
     return status;
 }
 
