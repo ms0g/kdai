@@ -2,6 +2,8 @@
 #include "dhcp.h"
 #include "errno.h"
 
+#include <linux/netfilter_bridge.h>
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("M. Sami GURPINAR <sami.gurpinar@gmail.com>");
 MODULE_DESCRIPTION("kdai(Kernel Dynamic ARP Inspection) is a linux kernel module to defend against arp spoofing");
@@ -219,9 +221,9 @@ static int __init kdai_init(void) {
         goto err;
     
     arpho->hook = (nf_hookfn *) arp_hook;       /* hook function */
-    arpho->hooknum = NF_ARP_IN;                 /* received packets */
-    arpho->pf = NFPROTO_ARP;                    /* ARP */
-    arpho->priority = NF_IP_PRI_FIRST;
+    arpho->hooknum = NF_BR_PRE_ROUTING;         /* received packets */
+    arpho->pf = NFPROTO_BRIDGE;                 /* ARP */
+    arpho->priority = NF_BR_PRI_FIRST;
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
         nf_register_net_hook(&init_net, arpho);
     #else
@@ -234,9 +236,9 @@ static int __init kdai_init(void) {
         goto err;
     
     ipho->hook = (nf_hookfn *) ip_hook;         /* hook function */
-    ipho->hooknum = NF_INET_PRE_ROUTING;        /* received packets */
-    ipho->pf = NFPROTO_IPV4;                    /* IP */
-    ipho->priority = NF_IP_PRI_FIRST;
+    ipho->hooknum = NF_BR_PRE_ROUTING;          /* received packets */
+    ipho->pf = NFPROTO_BRIDGE;                  /* IP */
+    ipho->priority = NF_BR_PRI_FIRST;
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
         nf_register_net_hook(&init_net, ipho);
     #else
