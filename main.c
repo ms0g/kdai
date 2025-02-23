@@ -2,6 +2,8 @@
 #include "dhcp.h"
 #include "errno.h"
 
+#include <linux/netfilter_bridge.h>
+
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("M. Sami GURPINAR <sami.gurpinar@gmail.com>");
 MODULE_DESCRIPTION("kdai(Kernel Dynamic ARP Inspection) is a linux kernel module to defend against arp spoofing");
@@ -43,27 +45,55 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     arp_ptr += dev->addr_len;
     memcpy(&tip, arp_ptr, 4);
 
+    printk(KERN_ERR "\nkdai: -- Hooked ARP Packet --\n");
+
     if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) == 0) {
-        for (ifa = indev->ifa_list; ifa; ifa = ifa->ifa_next) {
-            if (ifa->ifa_address == tip) {
-                // querying arp table
-                hw = neigh_lookup(&arp_tbl, &sip, dev);
-                if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
-                    status = NF_DROP;
-                    neigh_release(hw);
-                }
-                // querying dhcp snooping table
-                entry = find_dhcp_snooping_entry(sip);
-                if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
-                    printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
-                    status = NF_DROP;
-                } else status = NF_ACCEPT;             
-        
-                break;
-            } else status = NF_DROP; 
+
+        printk(KERN_INFO "kdai: ARP was VALID\n");
+        printk(KERN_INFO "kdai: Interface Name: %s\n",dev->name);
+
+        // querying arp table
+        // Look up the ARP Table to check if there is an existing ARP entry
+        // for the sorce IP address. (Could be real or what the attacker claims to be)
+        hw = neigh_lookup(&arp_tbl, &sip, dev);
+        if(hw) {
+            printk(KERN_INFO "kdai: An entry exists in the ARP Snooping Table for the claimed source IP address.\n");
+        }
+        // If we find an entry in the arp table for the source IP address
+        // AND the Mac Address of that entry is different from
+        // the mac address from the ARP packet
+        if (hw && memcmp(hw->ha, sha, dev->addr_len) != 0) {
+            printk(KERN_INFO "kdai: A Known Mac Adress with the same Source IP was different from received the received Mac Address\n");
+            status = NF_DROP;
+            neigh_release(hw);
+        }
+        // querying dhcp snooping table
+        // Loop up the DHCP Snooping Table to check if there is an entry for the claimed
+        // source IP address in the table
+        entry = find_dhcp_snooping_entry(sip);
+        if(entry) {
+            printk(KERN_INFO "kdai: An entry exists in the DHCP Snooping Table for the claimed source IP address.\n");
+        }
+        //If we find an entry AND the Mac Address from the DHCP snooping table does not match
+        //with the MAC address in the ARP packet ARP spoofing detected.
+        if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
+            printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
+            status = NF_DROP;
+        } else {
+            printk(KERN_INFO "kdai: -- ACCEPTING ARP PACKET -- \n");
+            status = NF_ACCEPT;
         }
    
-    } else status = NF_DROP;
+    } else {
+        printk(KERN_INFO "kdai: ARP was NOT VALID\n");
+        status = NF_DROP;
+    }
+
+    if(status == 1){
+        printk(KERN_INFO "kdai: -- ARP RETURN status was: NF_ACCEPT -- \n\n");
+    } else {
+        printk(KERN_INFO "kdai: -- ARP RETURN status was: NF_DROP -- \n\n");
+    }
     
     return status;
 }
@@ -89,10 +119,13 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
     udp = udp_hdr(skb);
     
     if (udp->source == htons(DHCP_SERVER_PORT) || udp->source == htons(DHCP_CLIENT_PORT)) {
+        printk(KERN_INFO "\nkdai: !! Hooked IP PACKET !!");
         payload = (struct dhcp*) ((unsigned char *)udp + sizeof(struct udphdr));
         
         if (dhcp_is_valid(skb) == 0) {
+            printk(KERN_INFO "kdai: Saw a valid DHCPACK\n");
             memcpy(&dhcp_packet_type, &payload->bp_options[2], 1);
+            printk(KERN_INFO "kdai: DHCP packet type: %u\n", dhcp_packet_type);
             
             switch (dhcp_packet_type) {
                 case DHCP_ACK:{
@@ -141,6 +174,7 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                     break;
                 }
             default:
+                printk(KERN_INFO "kdai: DHCP defaulted to break\n");
                 break;
             }
       
@@ -161,9 +195,11 @@ static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha,
     memcpy(shaddr, eth->h_source, ETH_ALEN);
     memcpy(dhaddr, eth->h_dest, ETH_ALEN);
 
+    //This is an optional feature that may be uncommented if administrators choose to.
+    //On Cisco devices this optional check known as “ip arp inspection validate src-mac”. 
     if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
-        printk(KERN_ERR "kdai: the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
-        return -EHWADDR;
+        //printk(KERN_ERR "kdai: the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
+        //return -EHWADDR;
     } 
 
     if (ipv4_is_multicast(sip)) {
@@ -215,9 +251,9 @@ static int __init kdai_init(void) {
         goto err;
     
     arpho->hook = (nf_hookfn *) arp_hook;       /* hook function */
-    arpho->hooknum = NF_ARP_IN;                 /* received packets */
-    arpho->pf = NFPROTO_ARP;                    /* ARP */
-    arpho->priority = NF_IP_PRI_FIRST;
+    arpho->hooknum = NF_BR_PRE_ROUTING;         /* received packets */
+    arpho->pf = NFPROTO_BRIDGE;                 /* ARP */
+    arpho->priority = NF_BR_PRI_FIRST;
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
         nf_register_net_hook(&init_net, arpho);
     #else
@@ -230,9 +266,9 @@ static int __init kdai_init(void) {
         goto err;
     
     ipho->hook = (nf_hookfn *) ip_hook;         /* hook function */
-    ipho->hooknum = NF_INET_PRE_ROUTING;        /* received packets */
-    ipho->pf = NFPROTO_IPV4;                    /* IP */
-    ipho->priority = NF_IP_PRI_FIRST;
+    ipho->hooknum = NF_BR_PRE_ROUTING;          /* received packets */
+    ipho->pf = NFPROTO_BRIDGE;                  /* IP */
+    ipho->priority = NF_BR_PRI_FIRST;
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
         nf_register_net_hook(&init_net, ipho);
     #else
