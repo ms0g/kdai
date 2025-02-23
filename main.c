@@ -89,10 +89,13 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
     udp = udp_hdr(skb);
     
     if (udp->source == htons(DHCP_SERVER_PORT) || udp->source == htons(DHCP_CLIENT_PORT)) {
+        printk(KERN_INFO "\nkdai: !! Hooked IP PACKET !!");
         payload = (struct dhcp*) ((unsigned char *)udp + sizeof(struct udphdr));
         
         if (dhcp_is_valid(skb) == 0) {
+            printk(KERN_INFO "kdai: Saw a valid DHCPACK\n");
             memcpy(&dhcp_packet_type, &payload->bp_options[2], 1);
+            printk(KERN_INFO "kdai: DHCP packet type: %u\n", dhcp_packet_type);
             
             switch (dhcp_packet_type) {
                 case DHCP_ACK:{
@@ -141,6 +144,7 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                     break;
                 }
             default:
+                printk(KERN_INFO "kdai: DHCP defaulted to break\n");
                 break;
             }
       
