@@ -167,9 +167,11 @@ static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha,
     memcpy(shaddr, eth->h_source, ETH_ALEN);
     memcpy(dhaddr, eth->h_dest, ETH_ALEN);
 
+    //This is an optional feature that may be uncommented if administrators choose to.
+    //On Cisco devices this optional check known as “ip arp inspection validate src-mac”. 
     if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
-        printk(KERN_ERR "kdai: the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
-        return -EHWADDR;
+        //printk(KERN_ERR "kdai: the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
+        //return -EHWADDR;
     } 
 
     if (ipv4_is_multicast(sip)) {
