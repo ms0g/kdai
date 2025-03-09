@@ -13,7 +13,7 @@ make
 ```
 ### Install
 ```bash
-sudo insmod kdai.ko
+make install
 ```
 ### Test
 ```bash
@@ -26,4 +26,4 @@ $ dmesg | tail -5
 ```
 ### Uninstall
 ```bash
-sudo rmmod kdai
+make remove
