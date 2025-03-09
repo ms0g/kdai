@@ -1,0 +1,78 @@
+name: ARP Test Workflow
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      # Install required Kernel Module build dependencies
+      - name: Install Build Essentials
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+      
+      # Compile the code
+      - name: Compile Code
+        run: make
+
+      # Install required Bridge and IP Tools 
+      - name: Install Networking Essentials
+        run: sudo apt install -y bridge-utils && sudo apt install -y iproute2
+
+      # Create Bridges, Virtual Interfaces, and Namespaces
+      - name: Create Bridges, Virtual Interfaces, and Namespaces
+        run: |
+          sudo ip link add name br1 type bridge
+          sudo ip link add veth0 type veth peer name veth1
+          sudo ip link add veth2 type veth peer name veth3
+          sudo ip netns add ns1
+          sudo ip netns add ns2
+
+      # Set Interfaces in Namespaces
+      - name: Assign Interfaces to Namespaces
+        run: |
+          sudo ip link set veth0 netns ns1
+          sudo ip link set veth3 netns ns2
+
+      # Add interfaces to bridges
+      - name: Attach Interfaces to Bridge
+        run: |
+          sudo ip link set veth1 master br1
+          sudo ip link set veth2 master br1
+
+      # Set IP addresses for Network Namespaces
+      - name: Set Up Namespace Test Enviornment
+        run: |
+          sudo ip netns exec ns1 ip addr add 192.168.1.1/24 dev veth0
+          sudo ip netns exec ns2 ip addr add 192.168.1.2/24 dev veth3
+      
+      # Bring up All interfaces
+      - name: Bring Up Interfaces
+        run: |
+          sudo ip link set br1 up
+          sudo ip link set veth1 up
+          sudo ip link set veth2 up
+          sudo ip netns exec ns1 ip link set veth0 up
+          sudo ip netns exec ns2 ip link set veth3 up
+          sudo ip netns exec ns1 ip link set lo up
+          sudo ip netns exec ns2 ip link set lo up
+
+      # Install Test Files Dependencies
+      - name: Install Python Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          sudo pip3 install scapy 
+
+      # Ensure working Testing Environment 
+      - name: Test Malformed ARP Request and Response  
+        run: sudo ip netns exec ns1 python3 ./tests/ARP_Request_And_Response.py
+  
