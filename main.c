@@ -203,13 +203,11 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                         memcpy(entry->mac, payload->chaddr, ETH_ALEN);
                         entry->lease_time = ntohl(lease_time);
                         entry->expires = ts.tv_sec + ntohl(lease_time);
-                        printk(KERN_INFO "kdai: Raw MAC Address: %*ph\n", ETH_ALEN, payload->chaddr);
                         printk(KERN_INFO "kdai: Updated DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %ld\n",
                             &payload->yiaddr, payload->chaddr, ntohl(lease_time), entry->expires);
                     } else {
                         insert_dhcp_snooping_entry(
                             payload->chaddr, payload->yiaddr, ntohl(lease_time), ts.tv_sec + ntohl(lease_time));
-                            printk(KERN_INFO "kdai: Raw MAC Address: %*ph\n", ETH_ALEN, payload->chaddr);
                             printk(KERN_INFO "kdai: Added new DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %ld\n",
                                 &payload->yiaddr, payload->chaddr, ntohl(lease_time), ts.tv_sec + ntohl(lease_time));
                     }
