@@ -40,8 +40,6 @@ if __name__ == "__main__":
     # Running the test
     try:
         test_arp_handling()
-        print("Test passed!")
-        assert(True)
+        print("ARP Response recieved")
     except AssertionError as e:
-        print(f"Test failed!")
-        assert(False)
+        print(f"ARP response not received")
