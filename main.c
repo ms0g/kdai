@@ -82,8 +82,7 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
         return status;
     }
 
-    printk(KERN_INFO "kdai: ARP request from Source IP: %pI4 on Interface Name: %s\n", &sip, dev->name);
-    printk(KERN_INFO "kdai: Interface Name: %s\n", dev->name);
+    printk(KERN_INFO "kdai: ARP request from Source IP: %pI4, came on Interface Name: %s\n", &sip, dev->name);
     printk(KERN_INFO "kdai: Checking an interface on the device\n");
     
     /* This is ARP ACL Match! */
@@ -139,7 +138,7 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     //If we find an entry AND the Mac Address from the DHCP snooping table does not match
     // with the MAC address in the ARP packet ARP spoofing detected.
     if (entry && memcmp(entry->mac, sha, ETH_ALEN) != 0) {
-        //printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", ifa->ifa_label, sha);
+        printk(KERN_INFO "kdai: ARP spoofing detected on %s from %pM\n", dev->name, sha);
         printk(KERN_INFO "ARP spoofing detected on %s, packet droped", dev->name);
         status = NF_DROP;
         print_status(status);
@@ -204,9 +203,15 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                         memcpy(entry->mac, payload->chaddr, ETH_ALEN);
                         entry->lease_time = ntohl(lease_time);
                         entry->expires = ts.tv_sec + ntohl(lease_time);
+                        printk(KERN_INFO "kdai: Raw MAC Address: %*ph\n", ETH_ALEN, payload->chaddr);
+                        printk(KERN_INFO "kdai: Updated DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %ld\n",
+                            &payload->yiaddr, payload->chaddr, ntohl(lease_time), entry->expires);
                     } else {
                         insert_dhcp_snooping_entry(
                             payload->chaddr, payload->yiaddr, ntohl(lease_time), ts.tv_sec + ntohl(lease_time));
+                            printk(KERN_INFO "kdai: Raw MAC Address: %*ph\n", ETH_ALEN, payload->chaddr);
+                            printk(KERN_INFO "kdai: Added new DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %ld\n",
+                                &payload->yiaddr, payload->chaddr, ntohl(lease_time), ts.tv_sec + ntohl(lease_time));
                     }
                     break;
                 }
