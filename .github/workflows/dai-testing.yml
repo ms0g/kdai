@@ -73,7 +73,7 @@ jobs:
           sudo pip3 install scapy 
 
       # Ensure working Testing Environment 
-      - name: Test Malformed ARP Request and Response  
+      - name: Basic ARP Request Messages To Ensure Testing Environemnt is Setup 
         run: | 
           sudo ip netns exec ns1 python3 ./tests/ARP_Request_And_Response.py
           sudo dmesg -C
@@ -102,7 +102,41 @@ jobs:
           if [ -n "$ARP_DROP_STATUS" ]; then
             sudo echo "Test Passed!"
           else
-            sudp echo "The ARP Request was Accepted when it should not have been"
+            sudo echo "The ARP Request was Accepted when it should not have been"
+            sudo echo "Test Failed!"
+            exit 1
+          fi
+
+      # Remove Module
+      - name: Clean Up Test
+        run: |
+          sudo dmesg -C
+          make remove
+
+          
+      # Test Case 2
+      # Insert the Kernel Module
+      - name: Insert Kernel Module
+        run: make install
+
+      - name: Test Malformed ARP Request and Response
+       # Expects Malformed Arp Requests Are Dropped by Kdai
+        run: |
+          # Run the ARP Malformed Request test
+          sudo ip netns exec ns1 python3 ./tests/Test_Malformed_ARP.py
+          
+          # Check dmesg logs for the ARP drop status
+          ARP_DROP_STATUS=$(sudo dmesg | grep "ARP RETURN status was: NF_DROP")
+          
+          # Print the dmesg log for debugging purposes
+          sudo echo "dmesg logs:"
+          sudo dmesg | tail -n 20  # Print the last 20 lines of dmesg
+          
+          # If ARP was dropped correctly, the test passed
+          if [ -n "$ARP_DROP_STATUS" ]; then
+            sudo echo "Test Passed!"
+          else
+            sudo echo "The ARP Request was met with a response when it should not have been"
             sudo echo "Test Failed!"
             exit 1
           fi
@@ -112,4 +146,5 @@ jobs:
         run: |
           sudo dmesg -C
           make remove
-  
+
+
