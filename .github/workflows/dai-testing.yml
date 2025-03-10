@@ -147,4 +147,54 @@ jobs:
           sudo dmesg -C
           make remove
 
+      
+      # Test Case 3
+      # Insert the Kernel Module
+      - name: Insert Kernel Module
+        run: make install
+
+      - name: Test An Static Entry Exists in the ARP table for the ARP request
+       # Expects Packet to be accepted even without DHCP snooping
+        run: |
+          #Assign static MAC addresses to veth0 and veth3
+          sudo ip netns exec ns1 ip link set veth0 down
+          sudo ip netns exec ns1 sudo ifconfig veth0 hw ether e2:c8:14:a6:4f:ed
+          sudo ip netns exec ns1 ip link set veth0 up
+
+          sudo ip netns exec ns2 ip link set veth3 down
+          sudo ip netns exec ns2 sudo ifconfig veth3 hw ether  3a:18:70:ca:91:b2
+          sudo ip netns exec ns2 ip link set veth3 up
+
+          #Add Static MAC addresses to veth1 and veth2 on the Switch
+          sudo arp -s 192.168.1.1 e2:c8:14:a6:4f:ed -i veth1
+          sudo arp -s 192.168.1.2 3a:18:70:ca:91:b2 -i veth2
+
+          # Run the ARP Request and Response script
+          sudo ip netns exec ns1 python3 ./tests/ARP_Request_And_Response.py
+          
+          # Check dmesg logs for the ARP drop status
+          ARP_DROP_STATUS=$(sudo dmesg | grep "ARP RETURN status was: NF_ACCEPT")
+          
+          # Print the dmesg log for debugging purposes
+          sudo echo "dmesg logs:"
+          sudo dmesg | tail -n 20  # Print the last 20 lines of dmesg
+          
+          # If ARP ACCEPET was fund, then Test passed
+          if [ -n "$ARP_DROP_STATUS" ]; then
+            sudo echo "Test Passed!"
+          else
+            sudo echo "The ARP Request was not met with a response"
+            sudo echo "Test Failed!"
+            exit 1
+          fi
+
+        # Remove Module
+      - name: Clean Up Test
+        run: |
+          sudo ip neigh del 192.168.1.1 dev veth1
+          sudo ip neigh del 192.168.1.2 dev veth2
+          sudo ip neigh flush all
+          sudo dmesg -C
+          make remove
+
 
