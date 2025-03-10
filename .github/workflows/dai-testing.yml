@@ -32,7 +32,9 @@ jobs:
         run: |
           sudo ip link add name br1 type bridge
           sudo ip link add veth0 type veth peer name veth1
+          sudo ifconfig veth0 hw ether e2:c8:14:a6:4f:ed
           sudo ip link add veth2 type veth peer name veth3
+          sudo ifconfig veth3 hw ether  3a:18:70:ca:91:b2
           sudo ip netns add ns1
           sudo ip netns add ns2
 
@@ -70,7 +72,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-pip
-          sudo pip3 install scapy 
+          sudo pip3 install scapy
+          sudo apt-get install dsniff 
 
       # Ensure working Testing Environment 
       - name: Basic ARP Request Messages To Ensure Testing Environemnt is Setup 
@@ -233,4 +236,47 @@ jobs:
           sudo dmesg -C
           make remove
 
+      # Test Case 5
+      # Insert the Kernel Module
+      - name: Insert Kernel Module
+        run: make install
 
+      - name: Test DAI Prevents ARP Poisoning
+       # Expects Packet to be dropped if conflicting with DHCP snooping
+        run: |
+
+          # Create and send the switch a Cusotm DHCP packet ACK for both 192.168.1.1 and 192.168.1.2
+          sudo ip netns exec ns1 python3 ./tests/DHCP_Snooping.py
+
+          # Run the ARP Request and Response script
+          sudo ip netns exec ns1 sudo arpspoof -i veth0 -t 192.168.1.11 192.168.1.101 &
+
+          # Save the process ID
+          ARPSPOOF_PID=$!
+ 
+          # Kill the process after waiting 3 seconds
+          sleep 3
+          sudo kill $ARPSPOOF_PID
+          
+          
+          # Check dmesg logs for the ARP drop status
+          ARP_DROP_STATUS=$(sudo dmesg | grep "ARP RETURN status was: NF_DROP")
+          
+          # Print the dmesg log for debugging purposes
+          sudo echo "dmesg logs:"
+          sudo dmesg | tail -n 20  # Print the last 20 lines of dmesg
+          
+          # If ARP DROP was found, then DAI did not forward the malicious packet.
+          if [ -n "$ARP_DROP_STATUS" ]; then
+            sudo echo "Test Passed!"
+          else
+            sudo echo "The ARP Request was met with a response"
+            sudo echo "Test Failed!"
+            exit 1
+          fi
+
+        # Remove Module
+      - name: Clean Up Test
+        run: |
+          sudo dmesg -C
+          make remove
