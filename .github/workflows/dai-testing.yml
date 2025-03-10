@@ -234,3 +234,49 @@ jobs:
           make remove
 
 
+      # Test Case 5
+      # Insert the Kernel Module
+      - name: Insert Kernel Module
+        run: make install
+
+      - name: Test DAI Prevents ARP Poisoning
+       # Expects Packet to be dropped if conflicting with DHCP snooping
+        run: |
+
+          # Create and send the switch a Cusotm DHCP packet ACK for both 192.168.1.1 and 192.168.1.2
+          sudo ip netns exec ns1 python3 ./tests/DHCP_Snooping.py
+
+          # Run the ARP Request and Response script
+          sudo ip netns exec ns1 sudo arpspoof -i veth0 -t 192.168.1.11 192.168.1.101 &
+
+          # Save the process ID
+          ARPSPOOF_PID=$!
+ 
+          # Kill the process after waiting 3 seconds
+          sleep 3
+          sudo kill $ARPSPOOF_PID
+          
+          
+          # Check dmesg logs for the ARP drop status
+          ARP_DROP_STATUS=$(sudo dmesg | grep "ARP RETURN status was: NF_DROP")
+          
+          # Print the dmesg log for debugging purposes
+          sudo echo "dmesg logs:"
+          sudo dmesg | tail -n 20  # Print the last 20 lines of dmesg
+          
+          # If ARP DROP was found, then DAI did not forward the malicious packet.
+          if [ -n "$ARP_DROP_STATUS" ]; then
+            sudo echo "Test Passed!"
+          else
+            sudo echo "The ARP Request was met with a response"
+            sudo echo "Test Failed!"
+            exit 1
+          fi
+
+        # Remove Module
+      - name: Clean Up Test
+        run: |
+          sudo dmesg -C
+          make remove
+
+
