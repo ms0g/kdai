@@ -179,7 +179,7 @@ jobs:
           sudo echo "dmesg logs:"
           sudo dmesg | tail -n 20  # Print the last 20 lines of dmesg
           
-          # If ARP ACCEPET was fund, then Test passed
+          # If ARP ACCEPET was found, then Test passed
           if [ -n "$ARP_DROP_STATUS" ]; then
             sudo echo "Test Passed!"
           else
@@ -194,6 +194,42 @@ jobs:
           sudo ip neigh del 192.168.1.1 dev veth1
           sudo ip neigh del 192.168.1.2 dev veth2
           sudo ip neigh flush all
+          sudo dmesg -C
+          make remove
+
+      # Test Case 4
+      # Insert the Kernel Module
+      - name: Insert Kernel Module
+        run: make install
+
+      - name: Test DAI Allows communicaiton from Acknowledged Sources
+       # Expects Packet to be accepted when the server sees a DHCP ACK
+        run: |
+          # Create and send the switch a Cusotm DHCP packet ACK for both 192.168.1.1 and 192.168.1.2
+          sudo ip netns exec ns1 python3 ./tests/DHCP_Snooping.py
+
+          #Send and ARP Request and wait for a Response
+          sudo ip netns exec ns1 python3 ./tests/ARP_Request_And_Response.py
+
+          # Check dmesg logs for the ARP drop status
+          ARP_DROP_STATUS=$(sudo dmesg | grep "ARP RETURN status was: NF_ACCEPT")
+          
+          # Print the dmesg log for debugging purposes
+          sudo echo "dmesg logs:"
+          sudo dmesg | tail -n 20  # Print the last 20 lines of dmesg
+          
+          # If ARP was found, then the test passed
+          if [ -n "$ARP_DROP_STATUS" ]; then
+            sudo echo "Test Passed!"
+          else
+            sudo echo "The ARP Request was met with a response when it should not have been"
+            sudo echo "Test Failed!"
+            exit 1
+          fi
+
+        # Remove Module
+      - name: Clean Up Test
+        run: |
           sudo dmesg -C
           make remove
 
