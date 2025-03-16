@@ -1,5 +1,6 @@
 
 #include "dhcp.h"
+#include "trustedInterfaces.h"
 #include "errno.h"
 
 #include <linux/netfilter_bridge.h>
@@ -71,6 +72,8 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
         // Drop if skb is NULL
         return NF_DROP;  
     }
+
+    print_trusted_interface_list();
 
     if(strcmp(dev->name,"enp0s7")==0){
         //printk(KERN_INFO "kdai: Matched ma1\n");
@@ -313,6 +316,18 @@ static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha,
 
 
 static int __init kdai_init(void) {
+    
+    //populate_trusted_interface_list();
+    //insert_trusted_interface("enp0s4");
+    print_trusted_interface_list();
+
+    if(find_trusted_interface("enp0s4")) {
+        printk(KERN_INFO "Found enp0s4 in the list");
+    } else {
+        printk(KERN_INFO "Did not find enp0s4 in the list");
+    }
+
+
     /* Initialize arp netfilter hook */
     arpho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     if (unlikely(!arpho))
@@ -373,6 +388,8 @@ static void __exit kdai_exit(void) {
     kfree(ipho);
     clean_dhcp_snooping_table();
     kthread_stop(dhcp_thread);
+    free_trusted_interface_list();
+
 }
 
 module_init(kdai_init);

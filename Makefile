@@ -4,7 +4,7 @@ KERNELRELEASE := $(shell uname -r)
 KDIR := /lib/modules/${KERNELRELEASE}/build
 MDIR := /lib/modules/${KERNELRELEASE}
 obj-m := ${MODULE}.o
-${MODULE}-objs := main.o dhcp.o
+${MODULE}-objs := main.o dhcp.o trustedInterfaces.o
 
 all:
 	make -C ${KDIR} M=${PWD} modules
