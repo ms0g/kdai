@@ -40,30 +40,37 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
         u8 ar_tip[4];          /* target protocol address (IP) */
     };
 
-    struct ethhdr *eth = eth_hdr(skb);  // Extract the Ethernet header
+    struct neighbour* hw;
+    int static_ACL_Enabled;
+    struct dhcp_snooping_entry* entry;
+    struct ethhdr *eth;
+    struct arp_hdr *arp;
+    unsigned char *sha;
+    u32 sip;
+    unsigned char *tha;
+    u32 tip;
+    struct net_device *dev;
+    unsigned int status = NF_ACCEPT;
+
+
+    eth = eth_hdr(skb);  // Extract the Ethernet header
     if (ntohs(eth->h_proto) != ETH_P_ARP) {
         // Not an ARP packet
         return NF_ACCEPT;
     }
-
-    struct neighbour* hw;
-    struct dhcp_snooping_entry* entry;
-    struct arp_hdr *arp = (struct arp_hdr *)(eth + 1);  // Skip past the Ethernet header to get the ARP header
+    arp = (struct arp_hdr *)(eth + 1);  // Skip past the Ethernet header to get the ARP header
     
-    unsigned char *sha = arp->ar_sha;   // Sender MAC address
-    u32 sip = *(u32 *)(arp->ar_sip);    // Sender IP address
-    unsigned char *tha = arp->ar_tha;   // Target MAC address
-    u32 tip = *(u32 *)(arp->ar_tip);    // Target IP address
+    sha = arp->ar_sha;   // Sender MAC address
+    sip = *(u32 *)(arp->ar_sip);    // Sender IP address
+    tha = arp->ar_tha;   // Target MAC address
+    tip = *(u32 *)(arp->ar_tip);    // Target IP address
 
-    struct net_device *dev = skb->dev;
-    struct in_device *indev = in_dev_get(dev);
-    unsigned int status = NF_ACCEPT;
+    dev = skb->dev;
 
     if (unlikely(!skb)) {
         // Drop if skb is NULL
         return NF_DROP;  
     }
-
 
     if(strcmp(dev->name,"enp0s7")==0){
         //printk(KERN_INFO "kdai: Matched ma1\n");
@@ -109,7 +116,7 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
 
     //The entries were different from expected. If Static ACL is configured do not Check DHCP table.
     
-    int static_ACL_Enabled = 0; // Default is false
+    static_ACL_Enabled = 0; // Default is false
     if (static_ACL_Enabled){
         //Accept packets only that were statically configured
         //Since the previous check failed drop the packet
@@ -203,12 +210,12 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
                         memcpy(entry->mac, payload->chaddr, ETH_ALEN);
                         entry->lease_time = ntohl(lease_time);
                         entry->expires = ts.tv_sec + ntohl(lease_time);
-                        printk(KERN_INFO "kdai: Updated DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %ld\n",
+                        printk(KERN_INFO "kdai: Updated DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %d\n",
                             &payload->yiaddr, payload->chaddr, ntohl(lease_time), entry->expires);
                     } else {
                         insert_dhcp_snooping_entry(
                             payload->chaddr, payload->yiaddr, ntohl(lease_time), ts.tv_sec + ntohl(lease_time));
-                            printk(KERN_INFO "kdai: Added new DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %ld\n",
+                            printk(KERN_INFO "kdai: Added new DHCP snooping entry - IP: %pI4, MAC: %pM, Lease Time: %d seconds, Expiry: %lld\n",
                                 &payload->yiaddr, payload->chaddr, ntohl(lease_time), ts.tv_sec + ntohl(lease_time));
                     }
                     break;
