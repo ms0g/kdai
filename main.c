@@ -12,11 +12,65 @@ MODULE_VERSION("0.1");
 
 #define eth_is_bcast(addr) (((addr)[0] & 0xffff) && ((addr)[2] & 0xffff) && ((addr)[4] & 0xffff))
 
-static struct nf_hook_ops* arpho = NULL;
 static struct nf_hook_ops* ipho = NULL;
+static struct nf_hook_ops* brho = NULL;
 
 static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha, 
-                        u32 sip, unsigned char* tha, u32 tip);
+    u32 sip, unsigned char* tha, u32 tip)  {
+    int status = SUCCESS;
+    const struct ethhdr* eth;
+    unsigned char shaddr[ETH_ALEN],dhaddr[ETH_ALEN];
+
+    eth = eth_hdr(skb);
+    memcpy(shaddr, eth->h_source, ETH_ALEN);
+    memcpy(dhaddr, eth->h_dest, ETH_ALEN);
+
+    //This is an optional feature that may be uncommented if administrators choose to.
+    //On Cisco devices this optional check known as “ip arp inspection validate src-mac”. 
+    if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
+        //printk(KERN_ERR "kdai: the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
+        //return -EHWADDR;
+    } 
+
+    if (ipv4_is_multicast(sip)) {
+        printk(KERN_ERR "kdai: the sender ip address %pI4 is multicast\n", &sip);
+        return -EIPADDR;
+    }
+
+    if (ipv4_is_loopback(sip)) {
+        printk(KERN_ERR "kdai: the sender ip address %pI4 is loopback\n", &sip);
+        return -EIPADDR;
+    }
+
+    if (ipv4_is_zeronet(sip)) {
+        printk(KERN_ERR "kdai: the sender ip address %pI4 is zeronet\n", &sip);
+        return -EIPADDR;
+    } 
+
+    if (ipv4_is_multicast(tip)) {
+        printk(KERN_ERR "kdai: the target ip address %pI4 is multicast\n", &tip);
+        return -EIPADDR;
+    }
+
+    if (ipv4_is_loopback(tip)) {
+        printk(KERN_ERR "kdai: the target ip address %pI4 is loopback\n", &tip);
+        return -EIPADDR;
+    }
+
+    if (ipv4_is_zeronet(tip)) {
+        printk(KERN_ERR "kdai: the target ip address %pI4 is zeronet\n", &tip);
+        return -EIPADDR;
+    }
+
+    if (ar_op == ARPOP_REPLY) {
+        if (memcmp(tha, dhaddr, ETH_ALEN) != 0) {
+            printk(KERN_ERR "kdai: the target MAC address %pM in the message body is NOT identical" 
+                "to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
+            return -EHWADDR;
+        }  
+    }
+    return status;
+}
 
 static void print_status(int status){
     if(status == 1){
@@ -26,7 +80,7 @@ static void print_status(int status){
     }
 }
 
-static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
+static unsigned int validate_arp_request(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
     
     //Refrence Structure to Standard ARP header used in the linux Kernel
     struct arp_hdr {
@@ -57,6 +111,7 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     eth = eth_hdr(skb);  // Extract the Ethernet header
     if (ntohs(eth->h_proto) != ETH_P_ARP) {
         // Not an ARP packet
+        printk(KERN_INFO "kdai: Packet was NOT an ARP packet. DAI does nothing. Accepting\n");
         return NF_ACCEPT;
     }
     arp = (struct arp_hdr *)(eth + 1);  // Skip past the Ethernet header to get the ARP header
@@ -73,13 +128,12 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
         return NF_DROP;  
     }
 
-    print_trusted_interface_list();
-
+    //For debugging purpouses only
     if(strcmp(dev->name,"enp0s7")==0){
-        //printk(KERN_INFO "kdai: Matched ma1\n");
+        printk(KERN_INFO "kdai: Packet was ARP packet for enp0s7. DAI does nothing. Accepting\n");
         return NF_ACCEPT;
     } else {
-        printk(KERN_ERR "\nkdai: -- Hooked ARP Packet --\n");
+        printk(KERN_ERR "kdai: -- Hooked ARP Packet --\n");
     }
 
     if (arp_is_valid(skb, ntohs(arp->ar_op), sha, sip, tha, tip) == 0) {
@@ -165,6 +219,56 @@ static unsigned int arp_hook(void* priv, struct sk_buff* skb, const struct nf_ho
     return status;
 }
 
+static bool is_trusted(struct sk_buff* skb) {
+    struct net_device *dev;
+    dev = skb->dev;
+
+    // Check if the device is trusted using the find_trusted_interface function
+    if (find_trusted_interface(dev->name)) {
+        printk(KERN_INFO "\nkdai: Packet was on a trusted interface: %s!!", dev->name);
+        return true;  // If the device is trusted, accept the packet
+    } else {
+        printk(KERN_INFO "\nkdai: Packet was on an untrusted interface: %s!!", dev->name);
+        return false;
+    }
+}
+
+static bool rate_limit_reached(struct sk_buff* skb){
+    struct net_device *dev;
+    dev = skb->dev;
+
+    //Assume the rate limit has not been reached.
+    return false;
+}
+
+static unsigned int bridge_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
+    struct net_device *dev;
+    dev = skb->dev;
+
+    //Used only for debugging purpouses
+    if(strcmp(dev->name,"enp0s7")==0){
+        return NF_ACCEPT;
+    }
+
+    //If the interface is trusted skip any calculations and accept the packet
+    if(is_trusted(skb)){
+        return NF_ACCEPT;
+    } else {
+        //Else the interface is not trusted
+        printk(KERN_INFO "kdai: Checking if we hit the rate limit: %s!!\n", dev->name);
+
+        //if the untrusted interface has hit its rate limit, the packet should be dropped
+        if(rate_limit_reached(skb)) {
+            printk(KERN_INFO "kdai: Packet hit the rate limit...dropping!!\n");
+            return NF_DROP;
+        } else {
+        //Else the interface has not hit its limit determine if the ARP request is real.
+            printk(KERN_INFO "kdai: Packet did NOT hit the rate limit!!\n");
+            printk(KERN_INFO "kdai: Checking if it was ARP!!\n");
+            return validate_arp_request(priv, skb, state);
+        }
+    }
+}
 
 static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hook_state* state) {
     struct udphdr* udp;
@@ -186,7 +290,7 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
     udp = udp_hdr(skb);
     
     if (udp->source == htons(DHCP_SERVER_PORT) || udp->source == htons(DHCP_CLIENT_PORT)) {
-        printk(KERN_INFO "\nkdai: !! Hooked IP PACKET !!");
+        printk(KERN_INFO "\nkdai: !! Hooked DHCP PACKET !!");
         payload = (struct dhcp*) ((unsigned char *)udp + sizeof(struct udphdr));
         
         if (dhcp_is_valid(skb) == 0) {
@@ -256,65 +360,6 @@ static unsigned int ip_hook(void* priv, struct sk_buff* skb, const struct nf_hoo
 }
 
 
-static int arp_is_valid(struct sk_buff* skb, u16 ar_op, unsigned char* sha, 
-                                u32 sip, unsigned char* tha, u32 tip)  {
-    int status = SUCCESS;
-    const struct ethhdr* eth;
-    unsigned char shaddr[ETH_ALEN],dhaddr[ETH_ALEN];
-
-    eth = eth_hdr(skb);
-    memcpy(shaddr, eth->h_source, ETH_ALEN);
-    memcpy(dhaddr, eth->h_dest, ETH_ALEN);
-
-    //This is an optional feature that may be uncommented if administrators choose to.
-    //On Cisco devices this optional check known as “ip arp inspection validate src-mac”. 
-    if (memcmp(sha, shaddr, ETH_ALEN) != 0) {
-        //printk(KERN_ERR "kdai: the sender MAC address %pM in the message body is NOT identical to the source MAC address in the Ethernet header %pM\n", sha, shaddr);
-        //return -EHWADDR;
-    } 
-
-    if (ipv4_is_multicast(sip)) {
-        printk(KERN_ERR "kdai: the sender ip address %pI4 is multicast\n", &sip);
-        return -EIPADDR;
-    }
-
-    if (ipv4_is_loopback(sip)) {
-        printk(KERN_ERR "kdai: the sender ip address %pI4 is loopback\n", &sip);
-        return -EIPADDR;
-    }
-
-    if (ipv4_is_zeronet(sip)) {
-        printk(KERN_ERR "kdai: the sender ip address %pI4 is zeronet\n", &sip);
-        return -EIPADDR;
-    } 
-            
-    if (ipv4_is_multicast(tip)) {
-        printk(KERN_ERR "kdai: the target ip address %pI4 is multicast\n", &tip);
-        return -EIPADDR;
-    }
-            
-    if (ipv4_is_loopback(tip)) {
-        printk(KERN_ERR "kdai: the target ip address %pI4 is loopback\n", &tip);
-        return -EIPADDR;
-    }
-            
-    if (ipv4_is_zeronet(tip)) {
-        printk(KERN_ERR "kdai: the target ip address %pI4 is zeronet\n", &tip);
-        return -EIPADDR;
-    }
-
-    if (ar_op == ARPOP_REPLY) {
-         if (memcmp(tha, dhaddr, ETH_ALEN) != 0) {
-            printk(KERN_ERR "kdai: the target MAC address %pM in the message body is NOT identical" 
-                            "to the destination MAC address in the Ethernet header %pM\n", tha, dhaddr);
-            return -EHWADDR;
-         }
-    }
-    return status;
-
-}
-
-
 static int __init kdai_init(void) {
     
     //populate_trusted_interface_list();
@@ -327,21 +372,20 @@ static int __init kdai_init(void) {
         printk(KERN_INFO "Did not find enp0s4 in the list");
     }
 
-
-    /* Initialize arp netfilter hook */
-    arpho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
-    if (unlikely(!arpho))
-        goto err;
-    
-    arpho->hook = (nf_hookfn *) arp_hook;       /* hook function */
-    arpho->hooknum = NF_BR_PRE_ROUTING;         /* received packets */
-    arpho->pf = NFPROTO_BRIDGE;                 /* ARP */
-    arpho->priority = NF_BR_PRI_FIRST;
-    #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-        nf_register_net_hook(&init_net, arpho);
-    #else
-        nf_register_hook(arpho);
-    #endif
+     /*Initialize Generic Hook for rate limiting all Bridged Traffic*/
+     brho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
+     if (unlikely(!brho))
+         goto err;
+ 
+     brho->hook = (nf_hookfn *) bridge_hook;  
+     brho->hooknum = NF_BR_PRE_ROUTING;
+     brho->pf = NFPROTO_BRIDGE;
+     brho->priority = NF_BR_PRI_FIRST;
+     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+     nf_register_net_hook(&init_net, brho);
+     #else
+         nf_register_hook(brho);
+     #endif 
 
     /* Initialize ip netfilter hook */
     ipho = (struct nf_hook_ops *) kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
@@ -367,25 +411,28 @@ static int __init kdai_init(void) {
     }
     return 0;   /* success */ 
 err:
-    if (arpho) kfree(arpho);
     if (ipho) kfree(ipho);
+    if(brho) kfree(brho);
     return -ENOMEM;    
 }
 
 
 static void __exit kdai_exit(void) {
+
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-        nf_unregister_net_hook(&init_net, arpho);
+        nf_unregister_net_hook(&init_net, brho);
     #else
-        nf_unregister_hook(arpho);
+        nf_unregister_hook(brho);
     #endif
-    kfree(arpho);
+    kfree(brho);
+
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
         nf_unregister_net_hook(&init_net, ipho);
     #else
         nf_unregister_hook(ipho);
     #endif
     kfree(ipho);
+
     clean_dhcp_snooping_table();
     kthread_stop(dhcp_thread);
     free_trusted_interface_list();
